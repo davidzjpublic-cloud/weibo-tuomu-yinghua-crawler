@@ -518,8 +518,8 @@ class MovieExtractor:
             r'(全\d+季\+番外\+花絮)',
             r'(全\d+季\+电影)',
             r'(第[一二两三四五六七八九十\d]+季(?:首播至第[一二两三四五六七八九十\d]+集)?(?:\s+含中字(?:前|第)[一二两三四五六七八九十\d]+季)?)',
-            # 无季数、只有“首播至第X集”的连载状态（如 绿灯军团）
-            r'(首播至第[一二两三四五六七八九十\d]+集)',
+            # 无季数、只有“首播至第X集/期”的连载状态（如 绿灯军团）
+            r'(首播至第[一二两三四五六七八九十\d]+[集期])',
         ]
         for pattern in extra_season_patterns:
             extra_season = re.search(pattern, text)
@@ -532,6 +532,11 @@ class MovieExtractor:
                 # 仅当捕获到除“第X季”之外的附加信息时才使用
                 if '首播' in captured or '含中字' in captured or '番外' in captured or '+电影' in captured:
                     info.season_extra = captured.replace('\n', ' ')
+                    # 综艺“期”数用阿拉伯数字（如“首播至第五期”→“首播至第5期”）；
+                    # “集”保持原样中文数字（如绿灯军团“首播至第一集”）
+                    m = re.match(r'^(首播至第)([一二两三四五六七八九十\d]+)(期)$', info.season_extra)
+                    if m and m.group(2) in self.chinese_numbers:
+                        info.season_extra = m.group(1) + str(self.chinese_numbers[m.group(2)]) + m.group(3)
                     break
 
         # 提取年份

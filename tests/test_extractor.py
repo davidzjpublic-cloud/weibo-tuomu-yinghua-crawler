@@ -136,6 +136,97 @@ class TestMovieExtractor:
         assert info.language == "捷克斯洛伐克语"
         assert info.subtitle == "中英双字"
 
+    def test_extract_japan_academy_award_animation(self, extractor):
+        # 回归：日本电影学院奖最佳动画片提名作品（烟囱小镇的普佩尔）
+        info = extractor.extract(
+            "《烟囱小镇的普佩尔》\n日本电影学院奖最佳动画片提名作品\n国日双语中字",
+            "994",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.awards == "日本电影学院奖最佳动画片提名作品"
+        assert info.language == "国日双语"
+
+    def test_extract_chinese_english_bilingual_language(self, extractor):
+        # 回归：“国英双语”作为组合语言识别（大卫·科波菲尔）
+        info = extractor.extract(
+            "《大卫·科波菲尔》\n改编自狄更斯同名高分原著\n全两集 国英双语中字",
+            "993",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.language == "国英双语"
+        assert info.subtitle == "中字"
+        assert info.episodes == 2
+
+    def test_extract_khmer_language(self, extractor):
+        # 回归：高棉语（无影医魂）
+        info = extractor.extract(
+            "《无影医魂》\n最新冷门恐怖电影推荐\n已出高棉语中字",
+            "992",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.language == "高棉语"
+        assert info.subtitle == "中字"
+
+    def test_extract_spanish_german_russian_slash_language(self, extractor):
+        # 回归：“西班牙/德/俄语”归一化为“西班牙德俄语”（你梦中的姑娘）
+        info = extractor.extract(
+            "《你梦中的姑娘》\n佩内洛普·克鲁兹主演电影\n西班牙/德/俄语中字",
+            "991",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.language == "西班牙德俄语"
+        assert info.subtitle == "中字"
+
+    def test_extract_greek_german_english_slash_language(self, extractor):
+        # 回归：“希腊/德/英语”归一化为“希腊德英语”，
+        # 不得被“德/英语”替换拆开而丢掉希腊（音乐）
+        info = extractor.extract(
+            "《音乐》\n柏林电影节金熊奖提名作品\n安格拉·夏娜莱克导演作品\n希腊/德/英语中英双字",
+            "990",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.language == "希腊德英语"
+        assert info.subtitle == "中英双字"
+
+    def test_extract_japanese_new_wave_work(self, extractor):
+        # 回归：“日本新浪潮电影作品”作为描述性荣誉保留（洲崎天堂红灯区）
+        info = extractor.extract(
+            "《洲崎天堂红灯区》\n川岛雄三执导 新珠三千代主演电影\n"
+            "日本新浪潮电影作品\n日语中字",
+            "987",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.director == "川岛雄三"
+        assert info.cast == ["新珠三千代"]
+        assert info.awards == "日本新浪潮电影作品"
+
+    def test_extract_variety_show_episode_arabic(self, extractor):
+        # 回归：综艺“首播至第五期”期数转阿拉伯数字“首播至第5期”（你为什么要爬山？）；
+        # 剧集“首播至第一集”保持中文数字（绿灯军团）
+        info = extractor.extract(
+            "《你为什么要爬山？》\n最新热门真人秀推荐\n首播至第五期",
+            "989",
+            "2026-08-18",
+        )
+        assert info is not None
+        assert info.season_extra == "首播至第5期"
+        filename = info.generate_filename()
+        assert "热门真人秀 首播至第5期" in filename
+
+        info2 = extractor.extract(
+            "《绿灯军团》\n最新热门动作科幻剧集推荐\n首播至第一集",
+            "988",
+            "2026-08-18",
+        )
+        assert info2 is not None
+        assert info2.season_extra == "首播至第一集"
+
     def test_foreign_season_suffix_merged_with_range(self):
         # 回归：叶卡捷琳娜大帝——外文名自带“Сезон 1”时，
         # 与生成的“1-4季”合并为“Сезон 1-4季”，不重复出现季数
