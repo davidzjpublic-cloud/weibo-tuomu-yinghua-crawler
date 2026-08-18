@@ -1,0 +1,27 @@
+# ===== 凭据与本地配置（含登录 Cookie / API Key，绝不提交）=====
+config.json
+config.json.bak
+备忘.txt
+
+# ===== 运行状态与缓存 =====
+processed_weibo.json
+.douban_cache.json
+lobster.log
+chrome_cdp_debug.log
+result.txt
+result0.txt
+result1.txt
+del
+
+# ===== 浏览器配置目录（含 Cookie）=====
+chrome_quark_profile/
+tmp_chrome_test_profile/
+
+# ===== Python =====
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ===== 本地工具配置 =====
+.claude/
