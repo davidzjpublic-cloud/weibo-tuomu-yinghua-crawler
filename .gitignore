@@ -14,6 +14,10 @@ result1.txt
 del
 sync_github.log
 
+# ===== 每日输出数据（不提交）=====
+filenames_*.txt
+results_*.json
+
 # ===== 浏览器配置目录（含 Cookie）=====
 chrome_quark_profile/
 tmp_chrome_test_profile/
