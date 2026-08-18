@@ -331,6 +331,9 @@ class Lobster:
         saved_any = False
         if self.save_enabled and results:
             saved_any = self._save_to_quark(source_link, results, weibo_id, image_urls)
+            # 逐条记录转存情况：有夸克 fid 且整单转存成功才算已转存
+            for r in results:
+                r.saved = saved_any and bool(r.quark_fid)
 
         # 仅当找到夸克链接时才标记为已处理并保存（调试模式下不写入）
         # 如果启用了转存但未实际转存成功，则保留到下次重试
@@ -572,7 +575,11 @@ def main() -> None:
     print(f"目标日期提取结果 ({len(results)} 条)")
     print(f"{'='*60}")
     for i, info in enumerate(results, 1):
-        print(f"\n{i}. {info.chinese_name or '未命名'}")
+        # --save 时在电影名后标注转存情况
+        marker = ""
+        if args.save:
+            marker = " （已转存）" if info.saved else " （未转存）"
+        print(f"\n{i}. {info.chinese_name or '未命名'}{marker}")
         if info.foreign_name:
             print(f"   外文名: {info.foreign_name}")
         if info.director:

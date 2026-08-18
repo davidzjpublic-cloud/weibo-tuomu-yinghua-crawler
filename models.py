@@ -36,6 +36,8 @@ class MovieInfo:
     source_link: Optional[str] = None
     quark_fid: Optional[str] = None
     quark_file_name: Optional[str] = None
+    # 转存情况：True=已转存，False=未转存，None=未启用 --save
+    saved: Optional[bool] = None
     weibo_id: Optional[str] = None
     publish_time: Optional[str] = None
     raw_text: Optional[str] = None
