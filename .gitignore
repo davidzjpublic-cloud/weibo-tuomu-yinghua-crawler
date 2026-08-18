@@ -12,6 +12,7 @@ result.txt
 result0.txt
 result1.txt
 del
+sync_github.log
 
 # ===== 浏览器配置目录（含 Cookie）=====
 chrome_quark_profile/
