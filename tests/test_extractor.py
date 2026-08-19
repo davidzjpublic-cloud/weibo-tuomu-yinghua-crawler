@@ -206,6 +206,89 @@ class TestMovieExtractor:
         assert info.cast == ["新珠三千代"]
         assert info.awards == "日本新浪潮电影作品"
 
+    def test_extract_golden_horse_actress_award(self, extractor):
+        # 回归：金马最佳女主角获奖作品（回光奏鸣曲）
+        info = extractor.extract(
+            "《回光奏鸣曲》\n洛迦诺电影节当代电影人单元金豹奖提名作品\n"
+            "金马最佳女主角获奖作品\n陈湘琪主演电影\n国语中字",
+            "986",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.awards == "洛迦诺电影节当代电影人单元金豹奖提名作品 金马最佳女主角获奖作品"
+
+    def test_extract_shan_language(self, extractor):
+        # 回归：掸语（魂歌）
+        info = extractor.extract(
+            "《魂歌》\n冷门纪录片推荐\n掸语中字",
+            "985",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.language == "掸语"
+        assert info.subtitle == "中字"
+
+    def test_extract_costume_drama_category(self, extractor):
+        # 回归：古装作为类别词，顺序在喜剧之后（王后伞下）
+        info = extractor.extract(
+            "《王后伞下》\n金惠秀主演高分喜剧古装剧集\n全16集 韩语中字",
+            "984",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.category == "喜剧/古装"
+        filename = info.generate_filename()
+        assert "高分喜剧古装剧集" in filename
+
+    def test_extract_talk_show_genre(self, extractor):
+        # 回归：访谈节目作为类型（怪奇背后）
+        info = extractor.extract(
+            "《怪奇背后》\n冷门高分访谈节目推荐\n全7集 英语中字",
+            "983",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.genre == "访谈节目"
+        filename = info.generate_filename()
+        assert "冷门高分访谈节目" in filename
+
+    def test_extract_berlin_forum_caligari_award(self, extractor):
+        # 回归：柏林电影节论坛单元卡里加里奖（想起所有夜晚）
+        info = extractor.extract(
+            "《想起所有夜晚》\n柏林电影节论坛单元卡里加里奖提名作品\n日语中字",
+            "982",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节论坛单元卡里加里奖提名作品"
+
+    def test_extract_berlin_best_doc_redundant_jian(self, extractor):
+        # 回归：“柏林电影节最佳纪录片奖获奖作品”去掉与“获奖”重复的“奖”
+        # （缅甸日记）；语言缅甸语；genre 纪录片因奖项已含“纪录”而隐藏
+        info = extractor.extract(
+            "《缅甸日记》\n柏林电影节最佳纪录片奖获奖作品\n缅甸语中字",
+            "981",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节最佳纪录片获奖作品"
+        assert info.language == "缅甸语"
+        filename = info.generate_filename()
+        assert "柏林电影节最佳纪录片获奖作品 缅甸语中字" in filename
+        assert "纪录片 " not in filename
+
+    def test_extract_animated_movie_genre(self, extractor):
+        # 回归：动画电影类型显示为“动画片”（猎魔人：深渊海妖）
+        info = extractor.extract(
+            "《猎魔人：深渊海妖》\n冷门动作奇幻冒险动画电影推荐\n英语中英双字",
+            "980",
+            "2026-08-19",
+        )
+        assert info is not None
+        assert info.genre == "动画片"
+        filename = info.generate_filename()
+        assert "冷门奇幻动作冒险动画片" in filename
+
     def test_extract_variety_show_episode_arabic(self, extractor):
         # 回归：综艺“首播至第五期”期数转阿拉伯数字“首播至第5期”（你为什么要爬山？）；
         # 剧集“首播至第一集”保持中文数字（绿灯军团）

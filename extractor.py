@@ -362,6 +362,10 @@ class MovieExtractor:
             match = re.search(pattern, text)
             if match:
                 award_text = match.group(1)
+                # “最佳X奖获奖/提名”中“奖”与“获奖/提名”语义重复，按惯例去掉
+                # （如“柏林电影节最佳纪录片奖获奖作品”→“柏林电影节最佳纪录片获奖作品”）；
+                # 不影响“金贝壳奖获奖作品”这类奖项名本身以“奖”结尾的形式
+                award_text = re.sub(r'(最佳[^，。\s]{1,8}?)奖(获奖|提名)', r'\1\2', award_text)
                 if not any(
                     award_text in existing and award_text != existing
                     for existing in found_awards
@@ -553,10 +557,13 @@ class MovieExtractor:
             info.genre = "短片"
         elif "真人秀" in text:
             info.genre = "真人秀"
+        elif "访谈节目" in text:
+            info.genre = "访谈节目"
         elif "剧集" in text:
             info.genre = "剧集"
         elif "动画" in text:
-            info.genre = "动画"
+            # 动画电影在文件名中显示为“动画片”，动画剧集已在上面的组合分支处理
+            info.genre = "动画片" if "动画电影" in text else "动画"
         else:
             info.genre = "电影"
 
