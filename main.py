@@ -306,6 +306,7 @@ class Lobster:
                 subtitle=base_info.subtitle,
                 genre=base_info.genre,
                 category=base_info.category,
+                related_tag=base_info.related_tag,
                 rating=base_info.rating,
                 awards=base_info.awards,
                 season=base_info.season,
