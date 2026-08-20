@@ -666,3 +666,51 @@ class TestMovieExtractor:
         """中文片名中的 HTML 实体也应被解码。"""
         info = MovieInfo(chinese_name="测试&amp;片", year=2020)
         assert info.chinese_name == "测试&片"
+
+    def test_extract_related_tag_prefix(self, extractor):
+        # 回归：“哈利·波特相关”描述前缀到类别段最前（再见，霍格沃茨）
+        info = extractor.extract(
+            "《再见，霍格沃茨》\n哈利·波特相关高分纪录片\n英语中英双字",
+            "5334108167476228",
+            "2026-08-20",
+        )
+        assert info is not None
+        assert info.related_tag == "哈利·波特相关"
+        assert info.genre == "纪录片"
+        filename = info.generate_filename()
+        assert "哈利·波特相关高分纪录片" in filename
+
+    def test_extract_bafta_best_british_film_award(self, extractor):
+        # 回归：英国电影学院奖最佳英国影片提名作品（发掘）
+        info = extractor.extract(
+            "《发掘》\n凯瑞·穆里根/拉尔夫·费因斯/莉莉·詹姆斯主演\n"
+            "英国电影学院奖最佳英国影片提名作品\n热门高分传记历史电影推荐\n英语中字",
+            "5334087736755867",
+            "2026-08-20",
+        )
+        assert info is not None
+        assert info.awards == "英国电影学院奖最佳英国影片提名作品"
+
+    def test_extract_karlovy_vary_crystal_globe_award(self, extractor):
+        # 回归：卡罗维发利电影节水晶地球仪奖最佳影片提名作品（催眠）
+        info = extractor.extract(
+            "《催眠》\n卡罗维发利电影节水晶地球仪奖最佳影片提名作品\n瑞典语中英双字",
+            "5334067505266702",
+            "2026-08-20",
+        )
+        assert info is not None
+        assert info.awards == "卡罗维发利电影节水晶地球仪奖最佳影片提名作品"
+        assert info.language == "瑞典语"
+
+    def test_extract_sp_genre(self, extractor):
+        # 回归：日剧特别篇“SP”作为类型替代默认“片”（吃饱睡足等幸福）
+        info = extractor.extract(
+            "《吃饱睡足等幸福～早春养生篇～》\n最新热门治愈SP推荐\n已出日语中日双字",
+            "5333937555769969",
+            "2026-08-20",
+        )
+        assert info is not None
+        assert info.genre == "SP"
+        assert info.category == "治愈"
+        filename = info.generate_filename()
+        assert "热门治愈SP" in filename

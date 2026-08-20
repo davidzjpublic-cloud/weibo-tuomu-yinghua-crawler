@@ -26,6 +26,8 @@ class MovieInfo:
     subtitle: Optional[str] = None
     genre: Optional[str] = None
     category: Optional[str] = None
+    # “X相关”描述（如“哈利·波特相关”），生成文件名时前缀到类别段最前
+    related_tag: Optional[str] = None
     rating: Optional[str] = None
     awards: Optional[str] = None
     douban_rating: Optional[str] = None
@@ -253,6 +255,9 @@ class MovieInfo:
             bracket_parts.append(awards_clean)
 
         combined = []
+        if self.related_tag:
+            # “X相关”描述置于类别段最前（如“哈利·波特相关高分纪录片”）
+            combined.append(safe_filename(self.related_tag))
         if self.rating:
             combined.append(safe_filename(self.rating))
         # 当 genre 为 "短片" 时，category 不显示（避免与奖项中的"短片"重复）

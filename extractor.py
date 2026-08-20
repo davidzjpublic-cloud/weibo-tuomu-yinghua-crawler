@@ -356,6 +356,12 @@ class MovieExtractor:
         if found_categories:
             info.category = '/'.join(found_categories)
 
+        # 提取“X相关”描述（如“哈利·波特相关高分纪录片”中的“哈利·波特相关”），
+        # 生成文件名时前缀到类别段最前
+        related_match = re.search(r'([^《》\n，。：:\s]{1,20}相关)', text_after_title)
+        if related_match:
+            info.related_tag = related_match.group(1)
+
         # 提取获奖情况
         found_awards = []
         for pattern in self.awards_patterns:
@@ -561,6 +567,9 @@ class MovieExtractor:
             info.genre = "访谈节目"
         elif "剧集" in text:
             info.genre = "剧集"
+        elif re.search(r'(?<![A-Za-z])SP(?![A-Za-z])', text):
+            # 日剧/日综特别篇“SP”（如“治愈SP推荐”），作为类型替代默认“片”
+            info.genre = "SP"
         elif "动画" in text:
             # 动画电影在文件名中显示为“动画片”，动画剧集已在上面的组合分支处理
             info.genre = "动画片" if "动画电影" in text else "动画"
