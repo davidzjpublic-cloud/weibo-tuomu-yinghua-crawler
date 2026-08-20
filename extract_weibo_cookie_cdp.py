@@ -22,6 +22,7 @@ chrome_weibo_profile）。首次运行时，请在弹出的 Chrome 窗口中登�
 import ctypes
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,8 @@ CONFIG_FILE = Path(__file__).resolve().parent / "config.json"
 WEIBO_PROFILE_DIR = Path(__file__).resolve().parent / "chrome_weibo_profile"
 REMOTE_DEBUGGING_PORT = 9223
 WEIBO_URL = "https://weibo.com/login.php"
+# 与爬虫一致的目标 UID，用于实测验证 Cookie 是否为有效登录态
+WEIBO_UID = "7608233324"
 
 # 判断微博登录态的关键 Cookie（至少要有 SUB / SUBP）
 ESSENTIAL_COOKIE_NAMES = {"SUB", "SUBP"}
@@ -207,6 +210,7 @@ def wait_for_login(ws_url: str, timeout: int = 300) -> list:
     print("登录成功后脚本会自动继续；若已登录过，会直接提取。\n")
 
     deadline = time.time() + timeout
+    validated = False
     while time.time() < deadline:
         all_cookies = get_all_cookies(ws_url)
         weibo_cookies = [
@@ -223,21 +227,62 @@ def wait_for_login(ws_url: str, timeout: int = 300) -> list:
                 c for c in all_cookies
                 if is_weibo_related_cookie(c.get("domain", ""))
             ]
-            print(f"\n检测到关键登录态 Cookie: {', '.join(REQUIRED_LOGIN_COOKIES)}")
-            return weibo_cookies
+            # 游客会话同样有 SUB/SUBP，必须实测接口确认是登录态
+            if cookie_is_logged_in(build_cookie_string(weibo_cookies)):
+                print(f"\n检测到有效登录态 Cookie: {', '.join(REQUIRED_LOGIN_COOKIES)}")
+                validated = True
+                return weibo_cookies
+            print("\n已有 SUB/SUBP 但为游客/过期状态，请在窗口中登录微博账号", end="\r")
 
         remaining = int(deadline - time.time())
         hint = f"已检测到: {', '.join(found_essential)}" if found_essential else "未检测到登录态"
         print(f"等待登录中... {hint} | 还剩 {remaining} 秒（按 Ctrl+C 取消）", end="\r")
         time.sleep(3)
 
-    print("\n\n等待超时，未检测到关键登录态 Cookie。")
+    if not validated:
+        print("\n\n等待超时，未检测到有效登录态 Cookie（游客态不算）。")
     return []
 
 
 def build_cookie_string(cookies: list) -> str:
     """将 CDP 返回的 Cookie 列表拼接为 HTTP Cookie 字符串。"""
     return "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+
+
+def cookie_is_logged_in(cookie_str: str) -> bool:
+    """实测 Cookie 是否为有效登录态。
+
+    游客会话同样带有 SUB/SUBP，仅凭 Cookie 名判断会把游客态当成已登录
+    （实测接口返回 403 “前方有点拥堵，请登录后使用”）。因此这里直接
+    调用爬虫使用的 mymblog 接口验证：HTTP 200 且 ok==1 才算登录有效。
+    """
+    session = get_requests_session()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://weibo.com",
+        "X-Requested-With": "XMLHttpRequest",
+        "Cookie": cookie_str,
+    }
+    xsrf = re.search(r"XSRF-TOKEN=([^;]+)", cookie_str)
+    if xsrf:
+        headers["X-XSRF-TOKEN"] = xsrf.group(1)
+    try:
+        r = session.get(
+            "https://weibo.com/ajax/statuses/mymblog",
+            params={"uid": WEIBO_UID, "page": 1, "feature": 0},
+            headers=headers,
+            timeout=15,
+        )
+        if r.status_code == 200 and r.json().get("ok") == 1:
+            return True
+        print(f"\n   Cookie 验证未通过: HTTP {r.status_code} {r.text[:60]}")
+    except Exception as e:
+        print(f"\n   Cookie 验证请求异常: {e}")
+    return False
 
 
 def write_config(cookie_str: str) -> None:
@@ -322,6 +367,10 @@ def main():
         hide_chrome_window(proc.pid)
 
         cookie_str = build_cookie_string(weibo_cookies)
+        # 写入前再验证一次，确保 config.json 不会被游客态覆盖
+        if not cookie_is_logged_in(cookie_str):
+            print("\n提取到的 Cookie 实测为未登录状态，config.json 未被修改。")
+            sys.exit(1)
         print(f"\n获取到 {len(weibo_cookies)} 个微博相关 Cookie: {', '.join(c['name'] for c in weibo_cookies)}")
         write_config(cookie_str)
 
