@@ -382,6 +382,11 @@ class MovieExtractor:
                     found_awards.append(award_text)
         if found_awards:
             info.awards = ' '.join(found_awards)
+            # 类别词若已包含在获奖信息中（如“金马最佳剧情短片获奖作品”含“剧情”“短片”），
+            # 不再作为类别重复显示
+            if info.category:
+                kept = [c for c in info.category.split('/') if c not in info.awards]
+                info.category = '/'.join(kept) if kept else None
 
         # 提取改编信息
         adaptation_match = re.search(r'(改编自[^《》]{0,20}《[^》]+》)', text)

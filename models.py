@@ -165,7 +165,7 @@ class MovieInfo:
                 and not c.isdigit()
             ]
             if cast_clean:
-                cast_str = '、'.join(cast_clean[:3])
+                cast_str = '、'.join(cast_clean[:4])
                 pos = self.cast_pos if self.cast_pos is not None else 9999
                 ordered_parts.append((pos, f"{safe_filename(cast_str)}主演"))
 

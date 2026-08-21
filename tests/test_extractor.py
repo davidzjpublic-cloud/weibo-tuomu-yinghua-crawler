@@ -714,3 +714,150 @@ class TestMovieExtractor:
         assert info.category == "治愈"
         filename = info.generate_filename()
         assert "热门治愈SP" in filename
+
+    def test_extract_golden_horse_short_film_award(self, extractor):
+        # 回归：金马最佳剧情短片获奖作品（讲话没有在听）；
+        # 类别词“剧情”“短片”已含于奖项，不再重复显示
+        info = extractor.extract(
+            "《讲话没有在听》\n金马最佳剧情短片获奖作品\n国/闽南语中英双字",
+            "5334458837243454",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "金马最佳剧情短片获奖作品"
+        assert info.category is None
+        filename = info.generate_filename()
+        assert "金马最佳剧情短片获奖作品 国闽南语中英双字" in filename
+        # “剧情”“短片”不作为独立类别段出现（奖项内含不算）
+        assert " 剧情" not in filename
+        assert "短片 " not in filename
+
+    def test_extract_golden_globe_award(self, extractor):
+        # 回归：金球奖最佳剧情片提名作品（曼克）；类别“剧情”已含于奖项
+        info = extractor.extract(
+            "《曼克》\n加里·奥德曼/阿曼达·塞弗里德/莉莉·柯林斯主演\n"
+            "金球奖最佳剧情片提名作品\n大卫·芬奇导演作品\n英语中英双字",
+            "5334294081046109",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "金球奖最佳剧情片提名作品"
+        assert info.category is None
+        filename = info.generate_filename()
+        assert "金球奖最佳剧情片提名作品 英语中英双字" in filename
+        assert "剧情片" not in filename.replace("金球奖最佳剧情片提名作品", "")
+
+    def test_extract_rotterdam_award(self, extractor):
+        # 回归：鹿特丹电影节大银幕奖提名作品（世界的阿菊）
+        info = extractor.extract(
+            "《世界的阿菊》\n鹿特丹电影节大银幕奖提名作品\n黑木华主演 阪本顺治导演作品\n日语中日双字",
+            "5334295568990369",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "鹿特丹电影节大银幕奖提名作品"
+        assert info.director == "阪本顺治"
+
+    def test_extract_czech_film_history_honor(self, extractor):
+        # 回归：捷克影史第一佳片描述性荣誉（玛婕妲·拉扎洛娃）
+        info = extractor.extract(
+            "《玛婕妲·拉扎洛娃》\n捷克影史第一佳片\n捷克语中字",
+            "5334457741740217",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "捷克影史第一佳片"
+        assert info.language == "捷克语"
+
+    def test_extract_director_debut_feature(self, extractor):
+        # 回归：“X导演长片首作”整体保留（追随），“首作”不作为导演名
+        info = extractor.extract(
+            "《追随》\n克里斯托弗·诺兰导演长片首作\n高分悬疑惊悚犯罪片推荐\n英语中英双字",
+            "5334356604223720",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "克里斯托弗·诺兰导演长片首作"
+        assert info.director is None
+        filename = info.generate_filename()
+        assert "克里斯托弗·诺兰导演长片首作 高分悬疑惊悚犯罪片" in filename
+
+    def test_extract_english_spanish_slash_language(self, extractor):
+        # 回归：英/西班牙语 → 英西班牙语（菜单）
+        info = extractor.extract(
+            "《菜单》\n拉尔夫·费因斯/安雅·泰勒-乔伊/尼古拉斯·霍尔特主演\n"
+            "热门喜剧惊悚恐怖片推荐\n英/西班牙语中英双字",
+            "5334436262712859",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "英西班牙语"
+        assert info.subtitle == "中英双字"
+
+    def test_extract_english_japanese_slash_language(self, extractor):
+        # 回归：英/日语 → 英日语（沉默）
+        info = extractor.extract(
+            "《沉默》\n安德鲁·加菲尔德/亚当·德赖弗/连姆·尼森主演电影\n"
+            "改编自远藤周作同名高分原著\n马丁·斯科塞斯导演作品\n英/日语中字",
+            "5334341559517242",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "英日语"
+        assert info.subtitle == "中字"
+
+    def test_extract_cantonese_mandarin_western_language(self, extractor):
+        # 回归：粤/国/西语 → 粤国西语（摄氏零度·春光再现）
+        info = extractor.extract(
+            "《摄氏零度·春光再现》\n热门高分纪录片推荐\n粤/国/西语中字",
+            "5334281616097453",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "粤国西语"
+        assert info.subtitle == "中字"
+
+    def test_extract_french_serbian_slash_language(self, extractor):
+        # 回归：法/塞尔维亚语 → 法塞尔维亚语（狂喜）
+        info = extractor.extract(
+            "《狂喜》\n戛纳电影节金摄影机奖提名作品\n法/塞尔维亚语中英双字",
+            "5334435672363926",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "法塞尔维亚语"
+        assert info.subtitle == "中英双字"
+
+    def test_extract_french_german_with_cn_fr_subtitle(self, extractor):
+        # 回归：法/德语 + 中法双字 → 法德语中法双字（同路前行）
+        info = extractor.extract(
+            "《同路前行》\n冷门冒险电影推荐\n法/德语中法双字",
+            "5334417096314116",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "法德语"
+        assert info.subtitle == "中法双字"
+
+    def test_extract_georgian_language(self, extractor):
+        # 回归：格鲁吉亚语（然后我们跳了舞）
+        info = extractor.extract(
+            "《然后我们跳了舞》\n戛纳电影节酷儿棕榈奖提名作品\n格鲁吉亚语中字",
+            "5334410000000001",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.language == "格鲁吉亚语"
+        assert info.subtitle == "中字"
+
+    def test_four_cast_members_kept(self, extractor):
+        # 回归：主演最多保留 4 人（不久，就要永别了）
+        info = extractor.extract(
+            "《不久，就要永别了》\n滨边美波/目黑莲/古川琴音/北村匠海主演电影\n已出日语中日双字",
+            "5334298223709310",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert len(info.cast) == 4
+        filename = info.generate_filename()
+        assert "滨边美波、目黑莲、古川琴音、北村匠海主演" in filename
