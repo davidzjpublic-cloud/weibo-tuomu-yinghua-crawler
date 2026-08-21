@@ -758,6 +758,18 @@ class TestMovieExtractor:
         assert info.awards == "鹿特丹电影节大银幕奖提名作品"
         assert info.director == "阪本顺治"
 
+    def test_extract_golden_globe_foreign_film_award(self, extractor):
+        # 回归：金球奖最佳外语片获奖作品（孩子的眼睛）
+        info = extractor.extract(
+            "《孩子的眼睛》\n金球奖最佳外语片获奖作品\n高峰秀子主演电影\n日语中字",
+            "5334481464462451",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.awards == "金球奖最佳外语片获奖作品"
+        filename = info.generate_filename()
+        assert "高峰秀子主演 金球奖最佳外语片获奖作品 日语中字" in filename
+
     def test_extract_czech_film_history_honor(self, extractor):
         # 回归：捷克影史第一佳片描述性荣誉（玛婕妲·拉扎洛娃）
         info = extractor.extract(
