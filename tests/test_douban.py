@@ -8,6 +8,8 @@ import pytest
 import douban
 from douban import (
     _is_chinese,
+    _is_latin_title,
+    _is_minor_script,
     _fetch_douban_search,
     search_movie,
     search_movie_foreign_name,
@@ -123,6 +125,106 @@ class TestSearchMovie:
         assert search_movie("fail_test") == (None, None)
         assert call_count[0] == 2
         assert "fail_test" not in douban._cache
+
+
+class TestMinorScriptLatinPreference:
+    """小语种文字标题自动改用拉丁字母“又名”，大语种保留原文。
+
+    回归案例：然后我们跳了舞（格鲁吉亚文 და ჩვენ ვიცეკვეთ → And Then
+    We Danced）、魂歌（缅甸文 လိပ်ပြာလင်္ကာ → Song of Souls）。
+    """
+
+    def test_minor_script_detection(self):
+        assert _is_minor_script("და ჩვენ ვიცეკვეთ") is True   # 格鲁吉亚文
+        assert _is_minor_script("လိပ်ပြာလင်္ကာ") is True          # 缅甸文
+        # 大语种保留原文
+        assert _is_minor_script("地面師たち") is False              # 日文
+        assert _is_minor_script("슈룹") is False                    # 韩文
+        assert _is_minor_script("คดีชมพู่") is False               # 泰文
+        assert _is_minor_script("Екатерина Сезон 1") is False      # 俄文
+        assert _is_minor_script("攝氏零度·春光再現") is False        # 中文
+        assert _is_minor_script("And Then We Danced") is False     # 拉丁
+        assert _is_minor_script("Café Society") is False           # 拉丁变音
+        assert _is_minor_script("") is False
+
+    def test_latin_title_detection(self):
+        assert _is_latin_title("And Then We Danced") is True
+        assert _is_latin_title("Da chven vitsek'vet") is True
+        assert _is_latin_title("Café Society") is True
+        assert _is_latin_title("以你的舞步撩动我(港)") is False      # 中文 aka
+        assert _is_latin_title("2:1") is False                     # 无字母
+        assert _is_latin_title("") is False
+
+    @staticmethod
+    def _fake_session(monkeypatch, search_title, aka_list, sid="30394484"):
+        """构造搜索页 + rexxar API 响应，返回 rexxar 请求计数。"""
+        rexxar_calls = [0]
+
+        class FakeResp:
+            def __init__(self, text, status_code=200):
+                self.text = text
+                self.status_code = status_code
+
+            def json(self):
+                import json as _json
+                return _json.loads(self.text)
+
+        search_html = (
+            '<div class="result">'
+            f'<a class="nbg" href="https://www.douban.com/link2/" '
+            f'onclick="moreurl(this,{{sid: {sid}}})" title="{search_title}">'
+            '<img src="https://img.doubanio.com/x.jpg"></a>'
+            '<span class="rating_nums">7.8</span>（15856人评价）2019</div>'
+        )
+
+        def fake_get(url, *args, **kwargs):
+            if "douban.com/search" in url:
+                return FakeResp(search_html)
+            if "rexxar" in url:
+                rexxar_calls[0] += 1
+                import json as _json
+                return FakeResp(_json.dumps({"title": "然后我们跳了舞", "aka": aka_list}))
+            raise AssertionError(f"意外请求: {url}")
+
+        monkeypatch.setattr(douban.requests, "get", fake_get)
+        douban._last_request_time = 0.0
+        return rexxar_calls
+
+    def test_minor_script_replaced_by_latin_aka(self, monkeypatch):
+        calls = self._fake_session(
+            monkeypatch,
+            "და ჩვენ ვიცეკვეთ",
+            ["以你的舞步撩动我(港)", "And Then We Danced", "Da chven vitsek'vet"],
+        )
+        foreign, rating = _fetch_douban_search("然后我们跳了舞", 2019)
+        assert foreign == "And Then We Danced"
+        assert rating == "7.8"
+        assert calls[0] == 1
+
+    def test_no_latin_aka_keeps_native_title(self, monkeypatch):
+        calls = self._fake_session(
+            monkeypatch, "လိပ်ပြာလင်္ကာ", ["灵魂乐"]
+        )
+        foreign, rating = _fetch_douban_search("魂歌")
+        assert foreign == "လိပ်ပြာလင်္ကာ"
+        assert calls[0] == 1
+
+    def test_major_script_skips_rexxar(self, monkeypatch):
+        calls = self._fake_session(monkeypatch, "슈룹", ["And Then We Danced"])
+        foreign, rating = _fetch_douban_search("王后伞下")
+        assert foreign == "슈룹"
+        assert calls[0] == 0
+
+    def test_stale_minor_script_cache_refreshed(self, monkeypatch):
+        """旧缓存中的小语种标题应被忽略并重查升级为拉丁标题。"""
+        douban._cache["然后我们跳了舞"] = (("და ჩვენ ვიცეკვეთ", "7.8"), 0.0)
+        self._fake_session(
+            monkeypatch,
+            "და ჩვენ ვიცეკვეთ",
+            ["And Then We Danced"],
+        )
+        result = search_movie("然后我们跳了舞", 2019)
+        assert result == ("And Then We Danced", "7.8")
 
 
 class TestEntryYearParsing:

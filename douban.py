@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -104,12 +105,101 @@ def _is_chinese(text: str) -> bool:
     return bool(re.search(r'[一-鿿]', text))
 
 
+# 大语种文字系统：中文/日文（汉字、假名）、韩文、泰文、俄文（西里尔）。
+# 这些语言的片名保留原文；其他非拉丁文字（格鲁吉亚文、缅甸文等小语种）
+# 自动改用条目“又名”中的拉丁字母标题
+_MAJOR_SCRIPTS_PREFIXES = ("CJK", "HIRAGANA", "KATAKANA", "HANGUL", "THAI", "CYRILLIC")
+
+
+def _char_script_prefix(ch: str) -> str:
+    """返回非 ASCII 字符的文字系统前缀（如 GEORGIAN、MYANMAR），无法判断返回空。"""
+    try:
+        return unicodedata.name(ch).split()[0]
+    except ValueError:
+        return ""
+
+
+def _is_minor_script(text: str) -> bool:
+    """判断标题是否含小语种文字（非拉丁且不属大语种的字母）。"""
+    if not text:
+        return False
+    for ch in text:
+        if ch.isascii() or not ch.isalpha():
+            continue
+        prefix = _char_script_prefix(ch)
+        if not prefix or prefix.startswith("LATIN"):
+            continue
+        if prefix.startswith(_MAJOR_SCRIPTS_PREFIXES):
+            continue
+        return True
+    return False
+
+
+def _is_latin_title(text: str) -> bool:
+    """判断标题是否为纯拉丁字母（可有变音符号、数字与标点）。"""
+    if not text:
+        return False
+    has_letter = False
+    for ch in text:
+        if not ch.isalpha():
+            continue
+        has_letter = True
+        if not (ch.isascii() or _char_script_prefix(ch).startswith("LATIN")):
+            return False
+    return has_letter
+
+
+def _throttled_get(url: str, headers: dict, timeout: int = 15) -> Optional["requests.Response"]:
+    """带请求间隔的 GET，失败返回 None。"""
+    global _last_request_time
+    elapsed = time.time() - _last_request_time
+    if elapsed < REQUEST_DELAY_SECONDS:
+        time.sleep(REQUEST_DELAY_SECONDS - elapsed)
+    _last_request_time = time.time()
+    try:
+        return requests.get(url, headers=headers, timeout=timeout)
+    except requests.RequestException as e:
+        logger.warning(f"请求失败 {url}: {e}")
+        return None
+
+
+def _fetch_latin_aka(sid: str) -> Optional[str]:
+    """查询条目“又名”列表，返回第一个纯拉丁字母标题。
+
+    通过 m.douban.com 的 rexxar API 获取（详情页有反爬，API 更稳定）。
+    无拉丁标题或请求失败时返回 None（保留原文字标题）。
+    """
+    if not sid:
+        return None
+    response = _throttled_get(
+        f"https://m.douban.com/rexxar/api/v2/movie/{sid}",
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://m.douban.com/",
+        },
+    )
+    if response is None or response.status_code != 200:
+        return None
+    try:
+        aka_list = response.json().get("aka") or []
+    except ValueError:
+        return None
+    for aka in aka_list:
+        if isinstance(aka, str) and _is_latin_title(aka.strip()):
+            return aka.strip()
+    return None
+
+
 def _choose_entry(
-    entries: List[Tuple[str, Optional[str], Optional[int]]],
+    entries: List[Tuple[str, Optional[str], Optional[int], Optional[str]]],
     chinese_name: str,
     year: Optional[int] = None,
-) -> Tuple[Optional[str], Optional[str]]:
-    """从 (标题, 评分, 年份) 候选条目中选择最合适的一个，返回 (外文名, 评分)。
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """从 (标题, 评分, 年份, 条目ID) 候选条目中选择最合适的一个，返回 (外文名, 评分, 条目ID)。
 
     规则：
     1. 去掉与中文名完全相同的候选（那只是中文名本身，不是外文名）。
@@ -119,9 +209,9 @@ def _choose_entry(
     4. 清理日文名中常见的“・第X部・...”后缀。
     """
     if not entries:
-        return None, None
+        return None, None, None
 
-    filtered = [i for i, (t, _, _) in enumerate(entries) if t != chinese_name]
+    filtered = [i for i, (t, _, _, _) in enumerate(entries) if t != chinese_name]
     if not filtered:
         filtered = list(range(len(entries)))
 
@@ -139,8 +229,8 @@ def _choose_entry(
     for idx in filtered:
         name = clean(entries[idx][0])
         if name:
-            return name, entries[idx][1]
-    return None, None
+            return name, entries[idx][1], entries[idx][3]
+    return None, None, None
 
 
 def _fetch_douban_search(
@@ -190,15 +280,19 @@ def _fetch_douban_search(
 
         text = response.text
 
-        # 按搜索结果块配对解析（标题 + 该条目自己的评分 + 条目年份），
+        # 按搜索结果块配对解析（标题 + 该条目自己的评分 + 条目年份 + 条目ID），
         # 避免外文名取自候选 A 而评分取自页面第一个结果
-        entries: List[Tuple[str, Optional[str], Optional[int]]] = []
+        entries: List[Tuple[str, Optional[str], Optional[int], Optional[str]]] = []
         for block in re.split(r'<div[^>]*class="[^"]*result[^"]*"', text)[1:]:
             title_match = re.search(
                 r'<a[^>]*class="nbg"[^>]*title="([^"]+)"', block,
             )
             if not title_match:
                 continue
+            # 条目ID：onclick 里的 sid 或 link2 跳转 URL 中编码的 subject id
+            sid_match = re.search(r'sid:\s*(\d+)', block)
+            if not sid_match:
+                sid_match = re.search(r'subject%2F(\d+)', block)
             rating_match = re.search(
                 r'<span[^>]*class="rating_nums"[^>]*>([\d.]+)</span>',
                 block,
@@ -225,6 +319,7 @@ def _fetch_douban_search(
                     title_match.group(1),
                     rating_match.group(1) if rating_match else None,
                     int(year_match.group(0)) if year_match else None,
+                    sid_match.group(1) if sid_match else None,
                 )
             )
 
@@ -232,7 +327,15 @@ def _fetch_douban_search(
             logger.warning(f"豆瓣搜索无结果条目: {chinese_name}")
             return None, None
 
-        return _choose_entry(entries, chinese_name, year)
+        foreign_name, rating, sid = _choose_entry(entries, chinese_name, year)
+        # 小语种文字标题（格鲁吉亚文、缅甸文等）改用“又名”中的拉丁字母标题；
+        # 中/日/韩/泰/俄等大语种保留原文
+        if foreign_name and _is_minor_script(foreign_name):
+            latin = _fetch_latin_aka(sid)
+            if latin:
+                logger.info(f"小语种标题改为拉丁字母: {foreign_name} -> {latin}")
+                foreign_name = latin
+        return foreign_name, rating
     except Exception as e:
         logger.error(f"豆瓣搜索异常: {e}")
         return None, None
@@ -251,7 +354,10 @@ def search_movie(
     key = chinese_name.strip()
     cached = _get_from_cache(key)
     if cached is not None:
-        return cached
+        # 旧缓存里可能存着小语种文字标题（拉丁优先规则生效前写入），
+        # 视为未命中重查，以便升级为拉丁字母标题并回写缓存
+        if not _is_minor_script(cached[0] or ""):
+            return cached
 
     foreign_name, rating = _fetch_douban_search(key, year)
 
