@@ -486,7 +486,7 @@ class MovieExtractor:
                 info.subtitle = lang_match.group(2)
             else:
                 fallback = re.search(
-                    r'(中英双语|中英双字|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字)',
+                    r'(中英双语|中英双字|中文字幕|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字)',
                     text,
                 )
                 if fallback:
@@ -562,6 +562,10 @@ class MovieExtractor:
         # 判断类型
         if "动画" in text and "剧集" in text:
             info.genre = "动画剧集"
+        elif re.search(r'无对白(?:纪录片|短片)', text):
+            # “无对白+类型”连写作为整体类型（如无对白纪录片、无对白短片）；
+            # “无对白纯享”这类不带类型词的不在此列，仍走语言位置
+            info.genre = re.search(r'无对白(?:纪录片|短片)', text).group(0)
         elif "纪录片" in text or "纪录长片" in text:
             info.genre = "纪录片"
         elif "短片" in text:

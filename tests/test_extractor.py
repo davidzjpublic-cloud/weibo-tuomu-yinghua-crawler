@@ -770,6 +770,81 @@ class TestMovieExtractor:
         filename = info.generate_filename()
         assert "高峰秀子主演 金球奖最佳外语片获奖作品 日语中字" in filename
 
+    def test_extract_berlin_panorama_award_and_lang(self, extractor):
+        # 回归：柏林电影节全景单元最佳影片获奖作品 + 法/英/挪威语（迷情漩涡）
+        info = extractor.extract(
+            "《迷情漩涡》\n柏林电影节全景单元最佳影片获奖作品\n丹尼斯·维伦纽瓦导演作品\n法/英/挪威语中字",
+            "5334821383442534",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节全景单元最佳影片获奖作品"
+        assert info.language == "法英挪威语"
+        assert info.subtitle == "中字"
+
+    def test_extract_chinese_subtitle_only(self, extractor):
+        # 回归：仅“中文字幕”无语言词时仍提取字幕（金钱骗局）
+        info = extractor.extract(
+            "《金钱骗局》\n冷门高分惊悚犯罪剧集推荐\n全8集 中文字幕",
+            "5334820649701447",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.language is None
+        assert info.subtitle == "中文字幕"
+        filename = info.generate_filename()
+        assert "全8集 中文字幕 豆瓣" in filename or "全8集 中文字幕" in filename
+
+    def test_extract_musical_category(self, extractor):
+        # 回归：“歌舞”作为类别词，顺序在喜剧之后（玛蒂尔达：音乐剧）
+        info = extractor.extract(
+            "《玛蒂尔达:音乐剧》\n高分喜剧歌舞片推荐\n英语中英双字",
+            "5334779378534952",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.category == "喜剧/歌舞"
+        filename = info.generate_filename()
+        assert "高分喜剧歌舞片" in filename
+
+    def test_extract_wordless_short_film_genre(self, extractor):
+        # 回归：“无对白短片”连写作为整体类型（蚁蛉）
+        info = extractor.extract(
+            "《蚁蛉》\n克里斯托弗·诺兰导演作品\n无对白短片",
+            "5334716564902130",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.genre == "无对白短片"
+        filename = info.generate_filename()
+        assert "克里斯托弗·诺兰导演 无对白短片" in filename
+
+    def test_extract_berlin_encounters_award_wordless_doc(self, extractor):
+        # 回归：柏林电影节遇见单元最佳影片提名作品 + “无对白纪录片”（贡达）
+        info = extractor.extract(
+            "《贡达》\n柏林电影节遇见单元最佳影片提名作品\n无对白纪录片",
+            "5334700230971683",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节遇见单元最佳影片提名作品"
+        assert info.genre == "无对白纪录片"
+        filename = info.generate_filename()
+        assert "柏林电影节遇见单元最佳影片提名作品 无对白纪录片" in filename
+
+    def test_wordless_pure_enjoy_not_merged_into_genre(self, extractor):
+        # 回归：“无对白纯享”不带类型词，仍走语言位置（时间的风景）
+        info = extractor.extract(
+            "《时间的风景》\n高分风光纪录片推荐\n无对白纯享",
+            "5334077000000001",
+            "2026-08-17",
+        )
+        assert info is not None
+        assert info.genre == "纪录片"
+        assert info.language == "无对白纯享"
+        filename = info.generate_filename()
+        assert "高分风光纪录片 无对白纯享" in filename
+
     def test_extract_czech_film_history_honor(self, extractor):
         # 回归：捷克影史第一佳片描述性荣誉（玛婕妲·拉扎洛娃）
         info = extractor.extract(
