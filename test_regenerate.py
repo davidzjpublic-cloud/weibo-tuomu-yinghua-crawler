@@ -66,6 +66,8 @@ def build_filename(
         genre=info.genre,
         category=info.category,
         related_tag=info.related_tag,
+        producer_tag=info.producer_tag,
+        work_credit=info.work_credit,
         rating=info.rating,
         awards=info.awards,
         season=info.season,

@@ -948,3 +948,123 @@ class TestMovieExtractor:
         assert len(info.cast) == 4
         filename = info.generate_filename()
         assert "滨边美波、目黑莲、古川琴音、北村匠海主演" in filename
+
+    def test_extract_busan_new_currents_award(self, extractor):
+        # 回归：釜山电影节新浪潮奖获奖作品（负罪少女）
+        info = extractor.extract(
+            "《负罪少女》\n釜山电影节新浪潮奖获奖作品\n韩语中字",
+            "5335300000000001",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.awards == "釜山电影节新浪潮奖获奖作品"
+        assert info.language == "韩语"
+        assert info.subtitle == "中字"
+
+    def test_extract_cannes_critics_week_award_malay(self, extractor):
+        # 回归：戛纳电影节影评人周单元大奖获奖作品 + 马来语（虎纹少女）
+        info = extractor.extract(
+            "《虎纹少女》\n戛纳电影节影评人周单元大奖获奖作品\n马来语中字",
+            "5335300000000002",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节影评人周单元大奖获奖作品"
+        assert info.language == "马来语"
+        assert info.subtitle == "中字"
+
+    def test_extract_berlin_encounters_best_director_multilingual(self, extractor):
+        # 回归：柏林遇见单元最佳导演 + 多语（马尔姆克罗格庄园）；
+        # 程序惯例：角色在前、奖项在后，“最佳导演获奖”不加冗余“奖”
+        info = extractor.extract(
+            "《马尔姆克罗格庄园》\n柏林电影节遇见单元最佳导演获奖作品\n克利斯提·普优导演作品\n多语中字",
+            "5335300000000003",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节遇见单元最佳导演获奖作品"
+        assert info.director == "克利斯提·普优"
+        assert info.language == "多语"
+        assert info.subtitle == "中字"
+        filename = info.generate_filename()
+        assert "克利斯提·普优导演 柏林电影节遇见单元最佳导演获奖作品 多语中字" in filename
+
+    def test_extract_producer_tag_standalone_segment(self, extractor):
+        # 回归：A24出品作为独立段落置于获奖之后（杨之后）
+        info = extractor.extract(
+            "《杨之后》\n科林·法瑞尔主演 郭共达执导 A24出品科幻片\n"
+            "戛纳电影节一种关注大奖提名作品\n英语中英双字",
+            "5335300000000004",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.producer_tag == "A24出品"
+        filename = info.generate_filename()
+        assert "戛纳电影节一种关注大奖提名作品 A24出品 科幻片" in filename
+
+    def test_extract_work_credit_without_director_word(self, extractor):
+        # 回归：“佩德罗·阿莫多瓦作品”不带“导演”字样的主创署名，
+        # 排在主演之后、获奖之前（奇怪的生活方式）
+        info = extractor.extract(
+            "《奇怪的生活方式》\n佩德罗·帕斯卡/伊桑·霍克主演 佩德罗·阿莫多瓦作品\n"
+            "戛纳电影节短片酷儿棕榈奖提名作品\n中英双字",
+            "5335300000000005",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.work_credit == "佩德罗·阿莫多瓦作品"
+        filename = info.generate_filename()
+        assert "佩德罗·帕斯卡、伊桑·霍克主演 佩德罗·阿莫多瓦作品 戛纳电影节短片酷儿棕榈奖提名作品" in filename
+
+    def test_work_credit_skipped_for_director_word(self, extractor):
+        # 回归：“X导演作品”“自导自演作品”不作为“X作品”署名（已由导演/组合角色提取）
+        info = extractor.extract(
+            "《触礁》\n索菲亚·科波拉导演作品\n英语中字",
+            "5335300000000006",
+            "2026-08-14",
+        )
+        assert info is not None
+        assert info.work_credit is None
+        assert info.director == "索菲亚·科波拉"
+        info2 = extractor.extract(
+            "《首》\n北野武自导自演作品\n日语中字",
+            "5335300000000007",
+            "2026-08-13",
+        )
+        assert info2 is not None
+        assert info2.work_credit is None
+        assert info2.director == "北野武"
+
+    def test_extract_san_sebastian_jury_special_prize(self, extractor):
+        # 回归：圣塞巴斯蒂安电影节主竞赛单元评审团特别奖获奖作品（佛在耻辱中倒塌）
+        info = extractor.extract(
+            "《佛在耻辱中倒塌》\n圣塞巴斯蒂安电影节主竞赛单元评审团特别奖获奖作品\n波斯语中英双字",
+            "5335300000000008",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.awards == "圣塞巴斯蒂安电影节主竞赛单元评审团特别奖获奖作品"
+        assert info.language == "波斯语"
+        assert info.subtitle == "中英双字"
+
+    def test_extract_french_arabic_english_slash_language(self, extractor):
+        # 回归：法/阿拉伯/英语 → 法阿拉伯英语（焦土之城）
+        info = extractor.extract(
+            "《焦土之城》\n丹尼斯·维伦纽瓦导演作品\n法/阿拉伯/英语中字",
+            "5335300000000009",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.language == "法阿拉伯英语"
+        assert info.subtitle == "中字"
+
+    def test_extract_german_russian_slash_language(self, extractor):
+        # 回归：德/俄语 → 德俄语（无主之作）
+        info = extractor.extract(
+            "《无主之作》\n威尼斯电影节金狮奖提名作品\n德/俄语中字",
+            "5335300000000010",
+            "2026-08-23",
+        )
+        assert info is not None
+        assert info.language == "德俄语"
+        assert info.subtitle == "中字"

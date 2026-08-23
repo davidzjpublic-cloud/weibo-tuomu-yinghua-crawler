@@ -362,6 +362,29 @@ class MovieExtractor:
         if related_match:
             info.related_tag = related_match.group(1)
 
+        # 提取出品方标注（如“A24出品科幻片”中的“A24出品”），
+        # 生成文件名时作为独立段落置于获奖之后
+        producer_match = re.search(r'([A-Za-z][A-Za-z0-9]{0,14}出品)', text_after_title)
+        if producer_match:
+            info.producer_tag = producer_match.group(1)
+
+        # 提取“X作品”主创署名（如“佩德罗·阿莫多瓦作品”，不带“导演/执导”字样的署名），
+        # 生成文件名时排在导演/主演之后、获奖之前；
+        # 含角色词或奖项词的“X作品”（如“X导演作品”“XX奖提名作品”“自导自演作品”）跳过
+        for m in re.finditer(r'([^《》\n，。：:\s]{2,15}作品)', text_after_title):
+            credit = m.group(1)
+            if any(
+                kw in credit
+                for kw in (
+                    '导演', '执导', '编剧', '主演', '自导', '自编',
+                    '获奖', '提名', '入围', '展映', '奖', '出品', '改编',
+                    '电影', '剧集', '纪录', '动画', '短片', '遗作', '首作',
+                )
+            ):
+                continue
+            info.work_credit = credit
+            break
+
         # 提取获奖情况
         found_awards = []
         for pattern in self.awards_patterns:

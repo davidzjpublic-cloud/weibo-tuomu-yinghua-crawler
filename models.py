@@ -28,6 +28,11 @@ class MovieInfo:
     category: Optional[str] = None
     # “X相关”描述（如“哈利·波特相关”），生成文件名时前缀到类别段最前
     related_tag: Optional[str] = None
+    # 出品方标注（如“A24出品”），生成文件名时作为独立段落置于获奖之后
+    producer_tag: Optional[str] = None
+    # “X作品”主创署名（如“佩德罗·阿莫多瓦作品”，不带“导演”字样），
+    # 生成文件名时排在导演/主演之后、获奖之前
+    work_credit: Optional[str] = None
     rating: Optional[str] = None
     awards: Optional[str] = None
     douban_rating: Optional[str] = None
@@ -247,12 +252,20 @@ class MovieInfo:
         ordered_parts = self._build_role_parts()
         bracket_parts.extend([p[1] for p in ordered_parts])
 
+        # “X作品”主创署名排在角色之后、获奖之前
+        if self.work_credit:
+            bracket_parts.append(safe_filename(self.work_credit))
+
         if self.awards and not self.awards.startswith('改编自'):
             awards_clean = safe_filename(self.awards)
             # 若奖项末尾与类型重复（如“洛迦诺电影节展映纪录片”+ genre“纪录片”），去掉末尾类型词
             if self.genre and awards_clean.endswith(self.genre):
                 awards_clean = awards_clean[:-len(self.genre)].rstrip()
             bracket_parts.append(awards_clean)
+
+        # 出品方标注独立成段，置于获奖之后、类别之前（与奖项以空格分隔）
+        if self.producer_tag:
+            bracket_parts.append(safe_filename(self.producer_tag))
 
         combined = []
         if self.related_tag:
