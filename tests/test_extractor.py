@@ -1068,3 +1068,52 @@ class TestMovieExtractor:
         assert info is not None
         assert info.language == "德俄语"
         assert info.subtitle == "中字"
+
+    def test_extract_tongying_genre(self, extractor):
+        # 回归：“同影”作为类型词，与类别连写（大男孩）
+        info = extractor.extract(
+            "《大男孩》\n最新冷门喜剧同影推荐\n已出英语中字",
+            "5335400000000001",
+            "2026-08-24",
+        )
+        assert info is not None
+        assert info.genre == "同影"
+        assert info.category == "喜剧"
+        filename = info.generate_filename()
+        assert "冷门喜剧同影" in filename
+
+    def test_extract_english_portuguese_german_slash_language(self, extractor):
+        # 回归：英/葡/德语 → 英葡德语（里斯本的故事）
+        info = extractor.extract(
+            "《里斯本的故事》\n维姆·文德斯执导高分电影\n英/葡/德语中字",
+            "5335400000000002",
+            "2026-08-24",
+        )
+        assert info is not None
+        assert info.language == "英葡德语"
+        assert info.subtitle == "中字"
+
+    def test_extract_cesar_best_foreign_film_award(self, extractor):
+        # 回归：法国凯撒电影奖最佳外语片提名作品（黑水）
+        info = extractor.extract(
+            "《黑水》\n马克·鲁法洛/安妮·海瑟薇/蒂姆·罗宾斯主演电影\n"
+            "法国凯撒电影奖最佳外语片提名作品\n托德·海因斯导演高分作品\n英语中英双字",
+            "5335400000000003",
+            "2026-08-24",
+        )
+        assert info is not None
+        assert info.awards == "法国凯撒电影奖最佳外语片提名作品"
+        assert info.director == "托德·海因斯"
+        filename = info.generate_filename()
+        assert "法国凯撒电影奖最佳外语片提名作品 高分片" in filename
+
+    def test_extract_russian_english_german_slash_language(self, extractor):
+        # 回归：俄/英/德语 → 俄英德语（纳瓦尔尼）；注意不能被“英/德语”抢先替换
+        info = extractor.extract(
+            "《纳瓦尔尼》\n奥斯卡金像奖最佳纪录长片获奖作品\n俄/英/德语中字",
+            "5335400000000004",
+            "2026-08-24",
+        )
+        assert info is not None
+        assert info.language == "俄英德语"
+        assert info.subtitle == "中字"

@@ -602,6 +602,9 @@ class MovieExtractor:
         elif re.search(r'(?<![A-Za-z])SP(?![A-Za-z])', text):
             # 日剧/日综特别篇“SP”（如“治愈SP推荐”），作为类型替代默认“片”
             info.genre = "SP"
+        elif "同影" in text:
+            # 同性恋题材电影简称“同影”，作为类型词（如“冷门喜剧同影”）
+            info.genre = "同影"
         elif "动画" in text:
             # 动画电影在文件名中显示为“动画片”，动画剧集已在上面的组合分支处理
             info.genre = "动画片" if "动画电影" in text else "动画"
