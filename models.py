@@ -20,6 +20,8 @@ class MovieInfo:
     foreign_name: Optional[str] = None
     year: Optional[int] = None
     director: Optional[str] = None
+    # “X监制”（如“侯孝贤监制”），生成文件名时按原文位置插入角色段
+    supervisor: Optional[str] = None
     writer: Optional[str] = None
     cast: List[str] = field(default_factory=list)
     language: Optional[str] = None
@@ -49,6 +51,7 @@ class MovieInfo:
     publish_time: Optional[str] = None
     raw_text: Optional[str] = None
     director_pos: Optional[int] = None
+    supervisor_pos: Optional[int] = None
     writer_pos: Optional[int] = None
     cast_pos: Optional[int] = None
 
@@ -129,7 +132,7 @@ class MovieInfo:
                 '中字', '语', '字', '导演', '主演', '高分', '热门', '冷门', '悬疑', '犯罪', '喜剧', '惊悚', '恐怖',
                 '动画', '纪录片', '剧情', '奇幻', '治愈', '音乐', '历史', '美食', '科幻', '动作', '爱情', '战争',
                 '传记', '运动', '儿童', '短片', '剧集', '电影', '作品', '日语', '中日', '双字', '字幕', '见平',
-                '推荐', '全', '集', '季',
+                '推荐', '集', '季',
             ]
             is_valid = (
                 director_clean
@@ -141,6 +144,19 @@ class MovieInfo:
             if is_valid:
                 pos = self.director_pos if self.director_pos is not None else 9999
                 ordered_parts.append((pos, f"{safe_filename(director_clean)}导演"))
+
+        if self.supervisor:
+            supervisor_clean = self.supervisor.strip()
+            is_valid = (
+                supervisor_clean
+                and len(supervisor_clean) < 15
+                and not any(kw in supervisor_clean for kw in invalid_keywords)
+                and not supervisor_clean.isdigit()
+                and not re.search(r'全\d+集|第\d+季', supervisor_clean)
+            )
+            if is_valid:
+                pos = self.supervisor_pos if self.supervisor_pos is not None else 9999
+                ordered_parts.append((pos, f"{safe_filename(supervisor_clean)}监制"))
 
         if self.writer and self.writer not in combined_names:
             writer_clean = self.writer.strip()

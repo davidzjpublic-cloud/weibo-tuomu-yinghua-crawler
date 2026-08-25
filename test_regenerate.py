@@ -59,6 +59,7 @@ def build_filename(
         foreign_name=foreign_name,
         year=year,
         director=info.director,
+        supervisor=info.supervisor,
         writer=info.writer,
         cast=info.cast,
         language=info.language,
@@ -76,6 +77,7 @@ def build_filename(
         episodes=info.episodes,
         raw_text=info.raw_text,
         director_pos=info.director_pos,
+        supervisor_pos=info.supervisor_pos,
         writer_pos=info.writer_pos,
         cast_pos=info.cast_pos,
     )

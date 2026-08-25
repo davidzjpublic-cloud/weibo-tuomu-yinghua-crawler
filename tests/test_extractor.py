@@ -1117,3 +1117,101 @@ class TestMovieExtractor:
         assert info is not None
         assert info.language == "俄英德语"
         assert info.subtitle == "中字"
+
+    def test_extract_venice_future_digital_film_award(self, extractor):
+        # 回归：威尼斯电影节未来数字电影奖获奖作品（白痴）
+        info = extractor.extract(
+            "《白痴》\n威尼斯电影节未来数字电影奖获奖作品\n浅野忠信主演高分电影\n日语中字",
+            "5335600000000001",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.awards == "威尼斯电影节未来数字电影奖获奖作品"
+        filename = info.generate_filename()
+        assert "浅野忠信主演 威尼斯电影节未来数字电影奖获奖作品 高分片" in filename
+
+    def test_extract_three_language_compound(self, extractor):
+        # 回归：英日国三语 作为整体语言（海贼王真人版）
+        info = extractor.extract(
+            "《海贼王(真人版）》\n热门高分奇幻动作剧集推荐\n全两季 英日国三语中字",
+            "5335600000000002",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.language == "英日国三语"
+        assert info.subtitle == "中字"
+
+    def test_extract_supervisor_and_quan_director(self, extractor):
+        # 回归：监制署名按原文位置插入角色段；导演名可含“全”字（范保德）
+        info = extractor.extract(
+            "《范保德》\n台北电影奖最佳剧情长片提名作品\n侯孝贤监制 萧雅全导演作品\n国/闽南语中字",
+            "5335600000000003",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.supervisor == "侯孝贤"
+        assert info.director == "萧雅全"
+        assert info.awards == "台北电影奖最佳剧情长片提名作品"
+        # “剧情长片”中的“剧情”不与显示形式“剧情片”重复，类别保留
+        assert info.category == "剧情"
+        filename = info.generate_filename()
+        assert "侯孝贤监制 萧雅全导演 台北电影奖最佳剧情长片提名作品 剧情片 国闽南语中字" in filename
+
+    def test_category_kept_when_award_has_feature_length_variant(self, extractor):
+        # 回归对照：奖项含“剧情片/剧情短片”（即显示形式）时类别抑制（曼克/讲话没有在听）
+        info = extractor.extract(
+            "《曼克》\n大卫·芬奇导演作品\n金球奖最佳剧情片提名作品\n英语中英双字",
+            "5335600000000004",
+            "2026-08-21",
+        )
+        assert info is not None
+        assert info.category is None
+        info2 = extractor.extract(
+            "《讲话没有在听》\n金马最佳剧情短片获奖作品\n国闽南语中英双字",
+            "5335600000000005",
+            "2026-08-21",
+        )
+        assert info2 is not None
+        assert info2.category is None
+        # 奖项含“动画长片”且“动画”即类型词本身 → 类别抑制（妮莫娜）
+        info3 = extractor.extract(
+            "《怪物少女妮莫娜》\n奥斯卡金像奖最佳动画长片提名作品\n英语中英双字",
+            "5335600000000006",
+            "2026-08-22",
+        )
+        assert info3 is not None
+        assert info3.category is None
+
+    def test_extract_cannes_dual_award_and_flemish_language(self, extractor):
+        # 回归：戛纳金摄影机奖、酷儿棕榈奖并列 + 法/弗拉芒/英语（女孩）
+        info = extractor.extract(
+            "《女孩》\n戛纳电影节金摄影机奖、酷儿棕榈奖获奖作品\n卢卡斯·德霍特导演高分作品\n法/弗拉芒/英语中字",
+            "5335600000000007",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节金摄影机奖、酷儿棕榈奖获奖作品"
+        assert info.language == "法弗拉芒英语"
+        filename = info.generate_filename()
+        assert "戛纳电影节金摄影机奖、酷儿棕榈奖获奖作品 高分片 法弗拉芒英语中字" in filename
+
+    def test_extract_german_english_french_slash_language(self, extractor):
+        # 回归：德/英/法语 → 德英法语（美国朋友）
+        info = extractor.extract(
+            "《美国朋友》\n维姆·文德斯导演作品\n德/英/法语中英双字",
+            "5335600000000008",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.language == "德英法语"
+        assert info.subtitle == "中英双字"
+
+    def test_concert_film_title_with_anniversary_not_skipped(self, extractor):
+        # 回归：片名含“周年”（《悲惨世界:十周年纪念演唱会》）不算非影视内容
+        text = "《悲惨世界:十周年纪念演唱会》\n热门高分音乐剧现场推荐\n英语中英双字"
+        assert extractor.is_non_movie_content(text) is False
+        info = extractor.extract(text, "5335600000000009", "2026-08-25")
+        assert info is not None
+        assert info.chinese_name == "悲惨世界：十周年纪念演唱会"
+        # “周年”在书名号外仍触发跳过（周年纪念贴）
+        assert extractor.is_non_movie_content("《教父》上映五十周年纪念") is True

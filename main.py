@@ -300,6 +300,7 @@ class Lobster:
                 foreign_name=foreign_name,
                 year=year,
                 director=base_info.director,
+                supervisor=base_info.supervisor,
                 writer=base_info.writer,
                 cast=base_info.cast,
                 language=base_info.language,
@@ -322,6 +323,7 @@ class Lobster:
                 publish_time=str(publish_time),
                 raw_text=base_info.raw_text,
                 director_pos=base_info.director_pos,
+                supervisor_pos=base_info.supervisor_pos,
                 writer_pos=base_info.writer_pos,
                 cast_pos=base_info.cast_pos,
             )

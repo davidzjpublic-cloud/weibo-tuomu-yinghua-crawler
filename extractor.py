@@ -87,8 +87,11 @@ class MovieExtractor:
                 return True
 
         if "《" in text and "》" in text:
+            # 标题（书名号内）中的关键词不算非影视信号，
+            # 如《悲惨世界:十周年纪念演唱会》片名本身含“周年”
+            text_outside_title = re.sub(r'《[^》]*》', '', text)
             for keyword in ["今天是", "周年", "去世", "生日", "票房已破"]:
-                if keyword in text:
+                if keyword in text_outside_title:
                     return True
             has_resource_hint = any(kw in text for kw in RESOURCE_HINT_KEYWORDS)
             has_film_festival = any(kw in text for kw in FILM_FESTIVAL_KEYWORDS)
@@ -246,6 +249,19 @@ class MovieExtractor:
             if best_director:
                 info.director = best_director
                 info.director_pos = best_director_pos
+
+        # 提取监制（如“侯孝贤监制 萧雅全导演作品”中的“侯孝贤”）
+        if not info.supervisor:
+            for m in re.finditer(r'([^《》\n\s]{2,15}?)监制', text):
+                cand = m.group(1).strip()
+                if (
+                    len(cand) < 15
+                    and not any(kw in cand for kw in INVALID_DIRECTOR_KEYWORDS)
+                    and not cand.isdigit()
+                ):
+                    info.supervisor = cand
+                    info.supervisor_pos = m.start()
+                    break
 
         # 提取编剧（组合角色未覆盖时再单独提取）
         if not info.writer:
@@ -405,11 +421,6 @@ class MovieExtractor:
                     found_awards.append(award_text)
         if found_awards:
             info.awards = ' '.join(found_awards)
-            # 类别词若已包含在获奖信息中（如“金马最佳剧情短片获奖作品”含“剧情”“短片”），
-            # 不再作为类别重复显示
-            if info.category:
-                kept = [c for c in info.category.split('/') if c not in info.awards]
-                info.category = '/'.join(kept) if kept else None
 
         # 提取改编信息
         adaptation_match = re.search(r'(改编自[^《》]{0,20}《[^》]+》)', text)
@@ -610,5 +621,19 @@ class MovieExtractor:
             info.genre = "动画片" if "动画电影" in text else "动画"
         else:
             info.genre = "电影"
+
+        # 类别词与获奖信息重复时不再作为类别显示（在类型判定后处理）：
+        # “最佳剧情片”“金马最佳剧情短片”中的“剧情”与显示形式“剧情片/剧情短片”重复 → 抑制；
+        # “最佳动画长片”中的“动画”即类型词本身 → 抑制；
+        # 但“最佳剧情长片”中的“剧情”≠类型词，显示形式“剧情片”不在获奖中 → 保留
+        if info.category and info.awards:
+            kept = []
+            for c in info.category.split('/'):
+                if c in info.awards and (
+                    c + '长片' not in info.awards or c == info.genre
+                ):
+                    continue
+                kept.append(c)
+            info.category = '/'.join(kept) if kept else None
 
         return info
