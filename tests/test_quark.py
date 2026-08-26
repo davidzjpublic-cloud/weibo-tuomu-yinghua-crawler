@@ -332,3 +332,29 @@ class TestQuarkClient:
                 update_call = call
                 break
         assert update_call is not None, "session.headers.update 未使用传入的 cookie"
+
+    def test_rename_file_replaces_halfwidth_slash(self, quark_client):
+        # 回归：夸克不接受文件名中的半角“/”，重命名前替换为全角“／”（19/20 成年初体验）
+        captured = {}
+
+        def fake_drive_request(method, url, **kwargs):
+            captured.update(kwargs.get("json") or {})
+            return {"code": 0}
+
+        quark_client._drive_request = MagicMock(side_effect=fake_drive_request)
+        ok = quark_client.rename_file("fid123", "19/20 成年初体验 2023 （冷门高分综艺 全13期 韩语中字 豆瓣7.6）")
+        assert ok is True
+        assert captured.get("file_name") == "19／20 成年初体验 2023 （冷门高分综艺 全13期 韩语中字 豆瓣7.6）"
+        assert "/" not in captured.get("file_name")
+
+    def test_rename_file_keeps_name_without_slash(self, quark_client):
+        captured = {}
+
+        def fake_drive_request(method, url, **kwargs):
+            captured.update(kwargs.get("json") or {})
+            return {"code": 0}
+
+        quark_client._drive_request = MagicMock(side_effect=fake_drive_request)
+        ok = quark_client.rename_file("fid123", "男人 Men 2022 （恐怖片）")
+        assert ok is True
+        assert captured.get("file_name") == "男人 Men 2022 （恐怖片）"

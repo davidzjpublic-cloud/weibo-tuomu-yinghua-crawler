@@ -398,6 +398,8 @@ class Lobster:
         conflict_names = set()
         for item in items:
             conflict_names.add(html.unescape(item["final_name"]))
+            # 夸克不接受半角“/”，实际落盘名是替换成全角“／”的变体，一并纳入检测
+            conflict_names.add(html.unescape(item["final_name"]).replace("/", "／"))
             share_name = item.get("share_file_name")
             if share_name:
                 conflict_names.add(html.unescape(share_name))

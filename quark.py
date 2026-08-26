@@ -718,9 +718,16 @@ class QuarkClient:
         return []
 
     def rename_file(self, fid: str, new_name: str) -> bool:
-        """重命名网盘中的文件/文件夹。"""
+        """重命名网盘中的文件/文件夹。
+
+        夸克不接受文件名里的半角“/”（API 返回 bad file name），
+        发送前替换为全角“／”（如片名“19/20”）。
+        """
         if not fid or not new_name:
             return False
+
+        if "/" in new_name:
+            new_name = new_name.replace("/", "／")
 
         url = f"{QUARK_SHARE_HOST}/1/clouddrive/file/rename"
         payload = {"fid": fid, "file_name": new_name}
