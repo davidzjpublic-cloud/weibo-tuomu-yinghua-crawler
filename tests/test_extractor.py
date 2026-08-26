@@ -1215,3 +1215,102 @@ class TestMovieExtractor:
         assert info.chinese_name == "悲惨世界：十周年纪念演唱会"
         # “周年”在书名号外仍触发跳过（周年纪念贴）
         assert extractor.is_non_movie_content("《教父》上映五十周年纪念") is True
+
+    def test_extract_silent_animation_genre(self, extractor):
+        # 回归：无对白+动画 连写作为整体类型词；类别被“最佳动画长片”抑制后
+        # “无对白”前缀类型仍显示（男孩与世界）
+        info = extractor.extract(
+            "《男孩与世界》\n奥斯卡金像奖最佳动画长片提名作品\n无对白动画\n见平👇",
+            "5335700000000001",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.genre == "无对白动画"
+        assert info.category is None
+        filename = info.generate_filename()
+        assert "奥斯卡金像奖最佳动画长片提名作品 无对白动画" in filename
+
+    def test_extract_cannes_directors_fortnight_award(self, extractor):
+        # 回归：戛纳电影节导演双周单元提名作品；A24出品 独立段置于获奖之后（男人）
+        info = extractor.extract(
+            "《男人》\n杰西·巴克利主演 亚历克斯·加兰导演作品\n"
+            "戛纳电影节导演双周单元提名作品\nA24出品恐怖电影\n英语中英双字",
+            "5335700000000002",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节导演双周单元提名作品"
+        assert info.producer_tag == "A24出品"
+        filename = info.generate_filename()
+        assert "戛纳电影节导演双周单元提名作品 A24出品 恐怖片" in filename
+
+    def test_extract_japanese_mandarin_slash_language(self, extractor):
+        # 回归：日/国语 → 日国语（漂泊皇妃）
+        info = extractor.extract(
+            "《漂泊皇妃》\n田中绢代执导 京町子主演电影\n日/国语中字",
+            "5335700000000003",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.language == "日国语"
+        assert info.subtitle == "中字"
+        filename = info.generate_filename()
+        assert "日国语中字" in filename
+
+    def test_extract_version_credit(self, extractor):
+        # 回归：“X版”演员版本署名独立成段，置于改编/获奖之后（伊豆的舞女）
+        info = extractor.extract(
+            "《伊豆的舞女》\n改编自川端康成同名原著\n鳄渊晴子版 日语中字",
+            "5335700000000004",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.version_credit == "鳄渊晴子版"
+        filename = info.generate_filename()
+        assert "改编自川端康成同名原著 鳄渊晴子版 日语中字" in filename
+        # 通用版本词不作版本署名
+        for raw in (
+            "《海贼王(真人版）》\n热门高分奇幻动作剧集推荐",
+            "《例片》\n修复版 高清电影推荐",
+            "《例片》\n2024版 悬疑剧集推荐",
+        ):
+            other = extractor.extract(raw, "5335700000000099", "2026-08-26")
+            assert other is not None
+            assert other.version_credit is None
+
+    def test_extract_variety_show_qi_episodes_and_slash_title(self, extractor):
+        # 回归：综艺类型 + “全13期”期数段；片名自带的“/”保留（19/20 成年初体验）
+        info = extractor.extract(
+            "《19/20 成年初体验》\n冷门高分综艺推荐\n全13期 韩语中字",
+            "5335700000000005",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.chinese_name == "19/20 成年初体验"
+        assert info.genre == "综艺"
+        assert info.season_extra == "全13期"
+        filename = info.generate_filename()
+        assert filename.startswith("19/20 成年初体验")
+        assert "冷门高分综艺 全13期 韩语中字" in filename
+
+    def test_extract_berlin_silver_bear_jury_award(self, extractor):
+        # 回归：柏林电影节银熊奖评审团奖获奖作品（百万美元酒店）
+        info = extractor.extract(
+            "《百万美元酒店》\n米拉·乔沃维奇/梅尔·吉布森主演电影\n"
+            "柏林电影节银熊奖评审团奖获奖作品\n维姆·文德斯导演作品\n英语中字",
+            "5335700000000006",
+            "2026-08-26",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节银熊奖评审团奖获奖作品"
+        assert info.director == "维姆·文德斯"
+        filename = info.generate_filename()
+        assert "柏林电影节银熊奖评审团奖获奖作品" in filename
+
+    def test_douban_foreign_name_embedded_in_chinese_dropped(self):
+        # 回归：豆瓣外文名已包含在中文名里时不再追加（19/20 成年初体验）
+        from douban import _drop_embedded_name
+
+        assert _drop_embedded_name("19/20 成年初体验", "19/20") is None
+        assert _drop_embedded_name("新飞越比佛利", "90210") == "90210"
+        assert _drop_embedded_name("男孩与世界", None) is None

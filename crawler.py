@@ -157,6 +157,26 @@ class WeiboCrawler:
         )
         if response is not None and response.status_code == 200:
             real_url = response.url
+            if real_url == short_url:
+                # t.cn 限流时返回 200 中间页而非 302 跳转，
+                # 改用 GET 抓取页面并解析其中给出的目标链接
+                logger.info(f"短链未跳转，GET 解析中间页: {short_url}")
+                page = self._safe_request(
+                    "GET",
+                    short_url,
+                    allow_redirects=True,
+                    timeout=DEFAULT_SHORTLINK_TIMEOUT,
+                )
+                if page is not None and page.status_code == 200:
+                    if page.url != short_url:
+                        real_url = page.url
+                    else:
+                        match = re.search(
+                            r'(?:url=|href=["\'])(https?://[^"\'<>\s]+)',
+                            page.text,
+                        )
+                        if match and match.group(1) != short_url:
+                            real_url = match.group(1)
             logger.info(f"短链展开: {short_url} -> {real_url}")
             return real_url
 

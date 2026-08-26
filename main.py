@@ -310,6 +310,7 @@ class Lobster:
                 related_tag=base_info.related_tag,
                 producer_tag=base_info.producer_tag,
                 work_credit=base_info.work_credit,
+                version_credit=base_info.version_credit,
                 rating=base_info.rating,
                 awards=base_info.awards,
                 season=base_info.season,

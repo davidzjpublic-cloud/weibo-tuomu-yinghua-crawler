@@ -341,6 +341,23 @@ def _fetch_douban_search(
         return None, None
 
 
+def _drop_embedded_name(
+    chinese_name: str, foreign_name: Optional[str]
+) -> Optional[str]:
+    """外文名已包含在中文名里时返回 None（忽略空格与斜杠差异）。
+
+    如“19/20 成年初体验”的豆瓣外文名“19/20”就是片名自带的数字部分，
+    再追加会造成重复。
+    """
+    if not foreign_name:
+        return foreign_name
+    norm = lambda s: re.sub(r"[\s/／]", "", s or "")
+    norm_foreign = norm(foreign_name)
+    if norm_foreign and norm_foreign in norm(chinese_name):
+        return None
+    return foreign_name
+
+
 def search_movie(
     chinese_name: str, year: Optional[int] = None
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -357,7 +374,7 @@ def search_movie(
         # 旧缓存里可能存着小语种文字标题（拉丁优先规则生效前写入），
         # 视为未命中重查，以便升级为拉丁字母标题并回写缓存
         if not _is_minor_script(cached[0] or ""):
-            return cached
+            return _drop_embedded_name(key, cached[0]), cached[1]
 
     foreign_name, rating = _fetch_douban_search(key, year)
 
@@ -365,6 +382,8 @@ def search_movie(
         # 忽略与原名完全一致的中文名
         if _is_chinese(foreign_name) and foreign_name == key:
             foreign_name = None
+        else:
+            foreign_name = _drop_embedded_name(key, foreign_name)
 
     result = (foreign_name, rating)
     # 仅缓存成功结果：被限流/解析失败返回的 (None, None) 不固化到缓存

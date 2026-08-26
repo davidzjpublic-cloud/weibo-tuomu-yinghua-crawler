@@ -43,7 +43,9 @@ def build_filename(
     if chinese_name:
         foreign_name, douban_rating_from_search = search_movie(chinese_name, year)
 
-    if not foreign_name:
+    if not foreign_name and not douban_rating_from_search:
+        # 仅当豆瓣搜索完全失败（外文名、评分均未取到）时才回填保存的外文名；
+        # 搜索成功但外文名因已包含在中文名里被去除时不再回填
         foreign_name = fallback_foreign_name
     if not douban_rating_from_search and fallback_douban_rating:
         douban_rating_from_search = fallback_douban_rating
@@ -69,6 +71,7 @@ def build_filename(
         related_tag=info.related_tag,
         producer_tag=info.producer_tag,
         work_credit=info.work_credit,
+        version_credit=info.version_credit,
         rating=info.rating,
         awards=info.awards,
         season=info.season,

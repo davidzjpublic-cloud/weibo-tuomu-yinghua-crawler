@@ -22,7 +22,8 @@ def safe_filename(text: Optional[str]) -> str:
     """
     if not text:
         return ""
-    text = re.sub(r'[<>"/\\|?*]', '', str(text))
+    # 保留“/”（如片名“19/20”自带的斜杠），其余 Windows 非法字符移除
+    text = re.sub(r'[<>"\\|?*]', '', str(text))
     text = text.replace(':', '：')
     # 去掉中文冒号两侧的空格，避免文件名中出现 "： " 这类间隔
     text = re.sub(r'\s*：\s*', '：', text)

@@ -35,6 +35,9 @@ class MovieInfo:
     # “X作品”主创署名（如“佩德罗·阿莫多瓦作品”，不带“导演”字样），
     # 生成文件名时排在导演/主演之后、获奖之前
     work_credit: Optional[str] = None
+    # “X版”版本署名（如同一原著多版影视中的“鳄渊晴子版”），
+    # 生成文件名时作为独立段落置于获奖之后
+    version_credit: Optional[str] = None
     rating: Optional[str] = None
     awards: Optional[str] = None
     douban_rating: Optional[str] = None
@@ -279,6 +282,10 @@ class MovieInfo:
                 awards_clean = awards_clean[:-len(self.genre)].rstrip()
             bracket_parts.append(awards_clean)
 
+        # “X版”版本署名独立成段，置于获奖之后、出品方之前
+        if self.version_credit:
+            bracket_parts.append(safe_filename(self.version_credit))
+
         # 出品方标注独立成段，置于获奖之后、类别之前（与奖项以空格分隔）
         if self.producer_tag:
             bracket_parts.append(safe_filename(self.producer_tag))
@@ -296,8 +303,8 @@ class MovieInfo:
             filtered = [c for c in cat_parts if not (self.genre and (c in self.genre or self.genre in c))]
             if filtered:
                 combined.append(''.join(filtered))
-        # genre 显示条件
-        show_genre = self.genre and (self.rating or self.category or (self.genre in ("剧集", "动画剧集") and (self.season or self.episodes or self.season_extra)))
+        # genre 显示条件（“无对白X”类整体类型词始终显示，如“无对白动画”）
+        show_genre = self.genre and (self.rating or self.category or self.genre.startswith("无对白") or (self.genre in ("剧集", "动画剧集") and (self.season or self.episodes or self.season_extra)))
         # category 已包含 genre 时不重复
         if show_genre and self.category and self.genre in self.category.replace('/', ''):
             show_genre = False

@@ -401,6 +401,26 @@ class MovieExtractor:
             info.work_credit = credit
             break
 
+        # 提取“X版”版本署名（如同一原著多版影视中的“鳄渊晴子版”，以演员名区分版本），
+        # 生成文件名时作为独立段落置于获奖之后；
+        # “完整版”“修复版”“真人版”“剧场版”“2024版”等通用版本词与纯数字跳过
+        for m in re.finditer(r'([^《》\n，。：:\s]{2,15}?)版(?=\s|$)', text_after_title):
+            credit = m.group(1)
+            if credit.isdigit():
+                continue
+            if any(
+                kw in credit
+                for kw in (
+                    '完整', '修复', '高清', '原声', '中文', '国语', '重制',
+                    '蓝光', '加长', '终极', '未删', '正片', '纯享', '黑白',
+                    '彩色', '精修', '真人', '剧场', '电影', '动画', '纪录',
+                    '导演', '编剧', '主演', '出演', '改编', '语', '字', '版',
+                )
+            ):
+                continue
+            info.version_credit = m.group(0)
+            break
+
         # 提取获奖情况
         found_awards = []
         for pattern in self.awards_patterns:
@@ -544,6 +564,19 @@ class MovieExtractor:
                 except ValueError:
                     pass
 
+        # 综艺“期”数（如“全13期”），保留“期”单位存入季集段
+        qi_match = re.search(r'全([0-9一二两三四五六七八九十]+)期', text)
+        if qi_match:
+            qi_str = qi_match.group(1)
+            qi_num = self.chinese_numbers.get(qi_str)
+            if qi_num is None:
+                try:
+                    qi_num = int(qi_str)
+                except ValueError:
+                    qi_num = None
+            if qi_num is not None:
+                info.season_extra = f'全{qi_num}期'
+
         # 提取季数
         season_match = re.search(self.patterns["season"], text)
         if season_match:
@@ -596,10 +629,10 @@ class MovieExtractor:
         # 判断类型
         if "动画" in text and "剧集" in text:
             info.genre = "动画剧集"
-        elif re.search(r'无对白(?:纪录片|短片)', text):
-            # “无对白+类型”连写作为整体类型（如无对白纪录片、无对白短片）；
+        elif re.search(r'无对白(?:纪录片|短片|动画)', text):
+            # “无对白+类型”连写作为整体类型（如无对白纪录片、无对白动画）；
             # “无对白纯享”这类不带类型词的不在此列，仍走语言位置
-            info.genre = re.search(r'无对白(?:纪录片|短片)', text).group(0)
+            info.genre = re.search(r'无对白(?:纪录片|短片|动画)', text).group(0)
         elif "纪录片" in text or "纪录长片" in text:
             info.genre = "纪录片"
         elif "短片" in text:
@@ -608,6 +641,9 @@ class MovieExtractor:
             info.genre = "真人秀"
         elif "访谈节目" in text:
             info.genre = "访谈节目"
+        elif "综艺" in text:
+            # 综艺节目作为类型词（如“冷门高分综艺推荐”）
+            info.genre = "综艺"
         elif "剧集" in text:
             info.genre = "剧集"
         elif re.search(r'(?<![A-Za-z])SP(?![A-Za-z])', text):
