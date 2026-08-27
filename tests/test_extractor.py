@@ -1314,3 +1314,70 @@ class TestMovieExtractor:
         assert _drop_embedded_name("19/20 成年初体验", "19/20") is None
         assert _drop_embedded_name("新飞越比佛利", "90210") == "90210"
         assert _drop_embedded_name("男孩与世界", None) is None
+
+    def test_extract_ny_film_critics_best_picture_award(self, extractor):
+        # 回归：纽约影评人协会奖最佳影片提名作品 → “协会奖”不保留“奖”字（孽扣）
+        info = extractor.extract(
+            "《孽扣》\n杰瑞米·艾恩斯主演 大卫·柯南伯格导演作品\n"
+            "纽约影评人协会奖最佳影片提名作品\n英语中英双字",
+            "5335800000000001",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.awards == "纽约影评人协会最佳影片提名作品"
+        assert info.director == "大卫·柯南伯格"
+        filename = info.generate_filename()
+        assert "纽约影评人协会最佳影片提名作品" in filename
+
+    def test_extract_hk_film_awards_best_actress_award(self, extractor):
+        # 回归：香港电影金像奖最佳女主角提名作品（填词L）
+        info = extractor.extract(
+            "《填词L》\n香港电影金像奖最佳女主角提名作品\n钟雪莹主演电影\n粤语中字",
+            "5335800000000002",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.awards == "香港电影金像奖最佳女主角提名作品"
+        assert info.cast == ["钟雪莹"]
+        filename = info.generate_filename()
+        assert "钟雪莹主演 香港电影金像奖最佳女主角提名作品 粤语中字" in filename
+
+    def test_extract_san_sebastian_audience_award(self, extractor):
+        # 回归：圣塞巴斯蒂安电影节观众选择奖获奖作品（春夏秋冬又一春）；
+        # “观众选择奖获奖”中的“奖”不适用最佳X去重规则，原样保留
+        info = extractor.extract(
+            "《春夏秋冬又一春》\n圣塞巴斯蒂安电影节观众选择奖获奖作品\n金基德导演高分作品\n韩语中字",
+            "5335800000000003",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.awards == "圣塞巴斯蒂安电影节观众选择奖获奖作品"
+        filename = info.generate_filename()
+        assert "金基德导演 圣塞巴斯蒂安电影节观众选择奖获奖作品 高分片" in filename
+
+    def test_extract_cesar_best_actor_award(self, extractor):
+        # 回归：法国凯撒电影奖最佳男主角获奖作品，奖项名内层“奖”按惯例去掉（伊夫·圣罗兰传）
+        info = extractor.extract(
+            "《伊夫·圣罗兰传》\n法国凯撒电影奖最佳男主角获奖作品\n皮埃尔·尼内主演传记电影\n法语中法双字",
+            "5335800000000004",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.awards == "法国凯撒电影奖最佳男主角获奖作品"
+        assert info.category == "传记"
+        filename = info.generate_filename()
+        assert "法国凯撒电影奖最佳男主角获奖作品 传记片" in filename
+
+    def test_extract_european_film_award_and_spanish_latin_language(self, extractor):
+        # 回归：欧洲电影奖最佳影片提名作品 + 西/拉丁语 → 西拉丁语（不良教育）
+        info = extractor.extract(
+            "《不良教育》\n欧洲电影奖最佳影片提名作品\n佩德罗·阿莫多瓦导演作品\n西/拉丁语中字",
+            "5335800000000005",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.awards == "欧洲电影奖最佳影片提名作品"
+        assert info.language == "西拉丁语"
+        assert info.subtitle == "中字"
+        filename = info.generate_filename()
+        assert "欧洲电影奖最佳影片提名作品 西拉丁语中字" in filename

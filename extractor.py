@@ -431,6 +431,9 @@ class MovieExtractor:
                 # （如“柏林电影节最佳纪录片奖获奖作品”→“柏林电影节最佳纪录片获奖作品”）；
                 # 不影响“金贝壳奖获奖作品”这类奖项名本身以“奖”结尾的形式
                 award_text = re.sub(r'(最佳[^，。\s]{1,8}?)奖(获奖|提名)', r'\1\2', award_text)
+                # “纽约影评人协会奖”按基准惯例不保留“奖”字（与“金马最佳”同风格；
+                # 注意“美国国家影评人协会奖”仍保留“奖”，二者不共用此规则）
+                award_text = award_text.replace('纽约影评人协会奖', '纽约影评人协会')
                 if not any(
                     award_text in existing and award_text != existing
                     for existing in found_awards
