@@ -43,16 +43,48 @@ from utils import clean_html, get_publish_date, parse_publish_time
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
-def setup_logging() -> None:
-    """配置日志输出到文件和控制台。"""
+# 控制台上仍显示的 INFO 日志前缀（关键进度节点）；其余 INFO 只写入日志文件
+CONSOLE_INFO_PREFIXES = (
+    "=== ",
+    "启动参数",
+    "处理微博 [",
+    "✅ 提取成功",
+    "非影视内容",
+    "开始转存",
+    "转存完成",
+    "结果已保存",
+    "文件名列表已保存",
+)
+
+
+class ConsoleFilter(logging.Filter):
+    """控制台精简过滤器：WARNING 及以上全放行，INFO 仅放行关键进度。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno >= logging.WARNING:
+            return True
+        return record.getMessage().startswith(CONSOLE_INFO_PREFIXES)
+
+
+def setup_logging(verbose: bool = False) -> None:
+    """配置日志输出到文件和控制台。
+
+    文件日志始终记录完整 INFO 明细；控制台默认只显示关键进度与
+    警告/错误，--verbose 时恢复完整输出（含 DEBUG 诊断信息）。
+    """
     log_path = PROJECT_ROOT / DEFAULT_LOG_FILE
+    file_handler = logging.FileHandler(log_path, encoding='utf-8')
+    console_handler = logging.StreamHandler(sys.stdout)
+    if verbose:
+        root_level = logging.DEBUG
+        file_handler.setLevel(logging.DEBUG)
+    else:
+        root_level = logging.INFO
+        console_handler.addFilter(ConsoleFilter())
     logging.basicConfig(
-        level=logging.INFO,
+        level=root_level,
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_path, encoding='utf-8'),
-            logging.StreamHandler(sys.stdout),
-        ],
+        handlers=[file_handler, console_handler],
     )
 
 
@@ -111,6 +143,11 @@ def parse_args() -> argparse.Namespace:
         "--save-dir",
         default="来自：分享/【拓临】",
         help='夸克网盘转存目标目录（默认: "来自：分享/【拓临】"）',
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="控制台显示完整日志（含 DEBUG 诊断信息，默认只显示关键进度与警告）",
     )
 
     args = parser.parse_args()
@@ -554,8 +591,8 @@ class Lobster:
 
 
 def main() -> None:
-    setup_logging()
     args = parse_args()
+    setup_logging(args.verbose)
 
     logging.info(f"启动参数: uid={args.uid}, max_pages={args.max_pages}, target_date={args.target_date}")
 
