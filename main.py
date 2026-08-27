@@ -90,12 +90,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-json",
         default=None,
-        help="JSON 结果输出路径（默认: results_目标日期.json）",
+        help="JSON 结果输出路径（默认: output/results_目标日期.json）",
     )
     parser.add_argument(
         "--output-txt",
         default=None,
-        help="文件名列表输出路径（默认: filenames_目标日期.txt）",
+        help="文件名列表输出路径（默认: output/filenames_目标日期.txt）",
     )
     parser.add_argument(
         "--skip-processed",
@@ -187,15 +187,15 @@ class Lobster:
         weibo_id = str(weibo.get("id", weibo.get("mid", "")))
 
         if not weibo_id:
-            logging.info("微博 ID 为空，跳过")
+            logging.debug("微博 ID 为空，跳过")
             return []
 
         if self.skip_processed and weibo_id in self.crawler.processed_ids:
-            logging.info(f"跳过已处理微博: {weibo_id}")
+            logging.debug(f"跳过已处理微博: {weibo_id}")
             return []
 
         if weibo_id in self.seen_weibo_ids:
-            logging.info(f"跳过本运行内重复微博: {weibo_id}")
+            logging.debug(f"跳过本运行内重复微博: {weibo_id}")
             return []
         self.seen_weibo_ids.add(weibo_id)
 
@@ -206,12 +206,12 @@ class Lobster:
 
         # 1) 日期过滤：非目标日期直接跳过
         if not parse_publish_time(publish_time, self.target_date):
-            logging.info(f"非目标日期发布: {publish_time}")
+            logging.debug(f"非目标日期发布: {publish_time}")
             return []
 
         base_info = self.extractor.extract(text, weibo_id, str(publish_time))
         if base_info is None:
-            logging.info("跳过非影视内容")
+            logging.debug("跳过非影视内容")
             return []
 
         # 每处理一个影视微博前空一行，方便日志区分
@@ -221,7 +221,7 @@ class Lobster:
         # 提取微博图片（保存时一并上传到夸克目标目录）
         image_urls = self.crawler.extract_image_urls(weibo)
         if image_urls:
-            logging.info(f"  发现 {len(image_urls)} 张图片，保存时一并上传")
+            logging.debug(f"  发现 {len(image_urls)} 张图片，保存时一并上传")
 
         # 1. 优先从正文找链接
         source_link = None
@@ -232,14 +232,14 @@ class Lobster:
 
         # 2. 正文没有则到评论中找
         if not source_link:
-            logging.info("获取评论...")
+            logging.debug("获取评论...")
             comments = self.crawler.get_comments(weibo_id)
 
             for i, comment in enumerate(comments[:3]):
                 comment_text = clean_html(comment.get("text", ""))
                 quark_from_struct = comment.get("_quark_link", "")
                 short_link = comment.get("_short_link", "")
-                logging.info(
+                logging.debug(
                     f"  评论 {i}: {comment_text[:50]}... "
                     f"结构化链接: {quark_from_struct[:40] if quark_from_struct else '无'} "
                     f"短链: {short_link[:30] if short_link else '无'}"
@@ -251,7 +251,7 @@ class Lobster:
             if source_link:
                 logging.info(f"从评论找到夸克链接: {source_link}")
             else:
-                logging.info("  未找到夸克链接")
+                logging.debug("  未找到夸克链接")
 
         if not source_link:
             return []
@@ -262,9 +262,9 @@ class Lobster:
             title = self.crawler.quark_client.get_share_title(source_link)
             if title:
                 files = [{"fid": None, "file_name": title}]
-                logging.info(f"分享无文件列表，使用分享标题: {title}")
+                logging.debug(f"分享无文件列表，使用分享标题: {title}")
             else:
-                logging.info("  未能获取夸克分享文件")
+                logging.debug("  未能获取夸克分享文件")
                 return []
 
         results = []
@@ -350,7 +350,7 @@ class Lobster:
             if self.skip_processed:
                 self.crawler.save_processed_ids(self.processed_file)
             else:
-                logging.info("未启用 --skip-processed：不写入 processed_weibo.json")
+                logging.debug("未启用 --skip-processed：不写入 processed_weibo.json")
 
         return results
 
@@ -381,7 +381,7 @@ class Lobster:
             return False
 
         for item in items:
-            logging.info(
+            logging.debug(
                 f"  准备转存: fid={item['fid']}, "
                 f"分享文件名={item.get('share_file_name')}, "
                 f"目标名={item['final_name']}"
@@ -420,7 +420,7 @@ class Lobster:
         ]
         if conflicts:
             conflict_names_log = [c.get("file_name") for c in conflicts]
-            logging.info(f"目标目录已存在同名项，先删除: {conflict_names_log}")
+            logging.debug(f"目标目录已存在同名项，先删除: {conflict_names_log}")
             if not client.delete_files([c["fid"] for c in conflicts]):
                 raise RuntimeError(f"删除目标目录同名项失败: {conflict_names_log}")
 
@@ -449,7 +449,7 @@ class Lobster:
                     and child.get("file_type") == 0
                 ):
                     image_target_fid = child["fid"]
-                    logging.info(f"微博图片将上传到子文件夹: {child.get('file_name')}")
+                    logging.debug(f"微博图片将上传到子文件夹: {child.get('file_name')}")
                     break
 
             # 配图是附属品：下载/上传失败只告警跳过，不影响已完成的转存结果，
@@ -541,6 +541,7 @@ class Lobster:
 
     def _save_results(self) -> None:
         """保存结果到文件。"""
+        Path(self.output_json).parent.mkdir(parents=True, exist_ok=True)
         data = [r.to_dict() for r in self.results]
         with open(self.output_json, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

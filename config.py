@@ -13,8 +13,8 @@ DEFAULT_REQUEST_TIMEOUT = 30
 DEFAULT_SHORTLINK_TIMEOUT = 10
 
 # 输出文件名模板
-OUTPUT_JSON_TEMPLATE = "results_{date}.json"
-OUTPUT_TXT_TEMPLATE = "filenames_{date}.txt"
+OUTPUT_JSON_TEMPLATE = "output/results_{date}.json"
+OUTPUT_TXT_TEMPLATE = "output/filenames_{date}.txt"
 DEFAULT_PROCESSED_FILE = "processed_weibo.json"
 DEFAULT_CONFIG_FILE = "config.json"
 DEFAULT_LOG_FILE = "lobster.log"
@@ -93,18 +93,20 @@ FILENAME_INVALID_CAST_KEYWORDS: List[str] = [
 # 不放单字“全”——“全8集”类由数字模式排除，而“萧雅全”等导演名含“全”；
 # “遗作”是“X导演遗作”的固定搭配，由奖项模式整体保留
 INVALID_DIRECTOR_KEYWORDS: List[str] = [
-    "语", "字", "英", "导演", "主演", "编剧", "获奖", "提名", "作品", "推荐",
+    "语", "字", "中字", "英", "导演", "主演", "编剧", "获奖", "提名", "作品", "推荐",
     "热门", "冷门", "高分", "悬疑", "惊悚", "喜剧", "恐怖", "犯罪", "动画", "纪录片",
     "剧情", "奇幻", "治愈", "音乐", "历史", "美食", "科幻", "动作", "爱情", "战争",
-    "传记", "运动", "儿童", "短片", "剧集", "电影", "集", "季", "遗作", "首作",
+    "传记", "运动", "儿童", "短片", "剧集", "电影", "日语", "中日", "双字", "字幕",
+    "见平", "集", "季", "遗作", "首作",
 ]
 
 # 编剧字段过滤关键字
 INVALID_WRITER_KEYWORDS: List[str] = [
-    "语", "字", "中", "英", "导演", "主演", "编剧", "获奖", "提名", "作品", "推荐",
+    "语", "字", "中字", "中", "英", "导演", "主演", "编剧", "获奖", "提名", "作品", "推荐",
     "热门", "冷门", "高分", "悬疑", "惊悚", "喜剧", "恐怖", "犯罪", "动画", "纪录片",
     "剧情", "奇幻", "治愈", "音乐", "历史", "美食", "科幻", "动作", "爱情", "战争",
-    "传记", "运动", "儿童", "短片", "剧集", "电影",
+    "传记", "运动", "儿童", "短片", "剧集", "电影", "日语", "中日", "双字", "字幕",
+    "见平", "全", "集", "季",
 ]
 
 # 演员字段过滤关键字

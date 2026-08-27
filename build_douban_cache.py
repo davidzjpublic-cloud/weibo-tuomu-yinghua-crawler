@@ -41,8 +41,8 @@ def parse_baseline(path: Path, results: list):
 
 
 def main():
-    baseline_path = Path("filenames_2026-08-16_0.txt")
-    results_path = Path("results_2026-08-16.json")
+    baseline_path = Path("output/filenames_2026-08-16_0.txt")
+    results_path = Path("output/results_2026-08-16.json")
     cache_path = Path(".douban_cache.json")
 
     with open(results_path, "r", encoding="utf-8") as f:

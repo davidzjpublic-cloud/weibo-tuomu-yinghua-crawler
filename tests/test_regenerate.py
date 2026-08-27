@@ -93,11 +93,11 @@ def main():
     # 默认重生成 2026-08-16 批次；传日期则读 results_日期.json 对比 filenames_日期_0.txt
     # 基准名与日期不同时可显式指定（如 08-17 批次对比 filenames_2026-08-18_0.txt）
     date = sys.argv[1] if len(sys.argv) > 1 else "2026-08-16"
-    json_path = Path(f"results_{date}.json")
+    json_path = Path(f"output/results_{date}.json")
     baseline_path = (
-        Path(sys.argv[2]) if len(sys.argv) > 2 else Path(f"filenames_{date}_0.txt")
+        Path(sys.argv[2]) if len(sys.argv) > 2 else Path(f"output/filenames_{date}_0.txt")
     )
-    output_path = Path(f"filenames_{date}_regenerated.txt")
+    output_path = Path(f"output/filenames_{date}_regenerated.txt")
 
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)

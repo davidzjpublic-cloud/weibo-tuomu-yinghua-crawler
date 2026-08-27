@@ -50,6 +50,6 @@ if __name__ == "__main__":
         baseline = sys.argv[1]
         actual = sys.argv[2]
     else:
-        baseline = "filenames_2026-08-16_0.txt"
-        actual = "filenames_2026-08-16.txt"
+        baseline = "output/filenames_2026-08-16_0.txt"
+        actual = "output/filenames_2026-08-16.txt"
     compare_files(baseline, actual)

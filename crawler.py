@@ -101,14 +101,14 @@ class WeiboCrawler:
         xsrf_match = re.search(r'XSRF-TOKEN=([^;]+)', self.cookie)
         if xsrf_match:
             headers["X-XSRF-TOKEN"] = xsrf_match.group(1)
-            logger.info(f"XSRF-TOKEN: {xsrf_match.group(1)[:20]}...")
+            logger.debug(f"XSRF-TOKEN: {xsrf_match.group(1)[:20]}...")
 
         if self.cookie:
             headers["Cookie"] = self.cookie
 
         self.session.headers.update(headers)
 
-        logger.info("初始化会话，访问微博主页...")
+        logger.debug("初始化会话，访问微博主页...")
         self._safe_request("GET", WEIBO_HOME_URL.format(uid=self.uid))
 
     def _safe_request(
@@ -122,7 +122,7 @@ class WeiboCrawler:
         for attempt in range(MAX_RETRIES):
             try:
                 delay = random.uniform(REQUEST_DELAY_MIN, REQUEST_DELAY_MAX)
-                logger.info(f"等待 {delay:.1f} 秒后请求...")
+                logger.debug(f"等待 {delay:.1f} 秒后请求...")
                 time.sleep(delay)
 
                 self.session.headers["User-Agent"] = random.choice(self.user_agents)
@@ -160,7 +160,7 @@ class WeiboCrawler:
             if real_url == short_url:
                 # t.cn 限流时返回 200 中间页而非 302 跳转，
                 # 改用 GET 抓取页面并解析其中给出的目标链接
-                logger.info(f"短链未跳转，GET 解析中间页: {short_url}")
+                logger.debug(f"短链未跳转，GET 解析中间页: {short_url}")
                 page = self._safe_request(
                     "GET",
                     short_url,
@@ -177,7 +177,7 @@ class WeiboCrawler:
                         )
                         if match and match.group(1) != short_url:
                             real_url = match.group(1)
-            logger.info(f"短链展开: {short_url} -> {real_url}")
+            logger.debug(f"短链展开: {short_url} -> {real_url}")
             return real_url
 
         return None
@@ -201,7 +201,7 @@ class WeiboCrawler:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(sorted(self.processed_ids), f, ensure_ascii=False, indent=2)
-            logger.info(f"已处理 ID 已保存: {path}")
+            logger.debug(f"已处理 ID 已保存: {path}")
         except Exception as e:
             logger.error(f"保存已处理 ID 失败: {e}")
 
@@ -217,7 +217,7 @@ class WeiboCrawler:
         ]
 
         for url, params in apis:
-            logger.info(f"尝试接口: {url}")
+            logger.debug(f"尝试接口: {url}")
             response = self._safe_request("GET", url, params=params)
 
             if not response:
@@ -225,13 +225,13 @@ class WeiboCrawler:
 
             try:
                 raw_text = response.text[:2000]
-                logger.info(f"原始响应: {raw_text[:500]}...")
+                logger.debug(f"原始响应: {raw_text[:500]}...")
             except Exception:
                 pass
 
             try:
                 data = response.json()
-                logger.info(f"响应: ok={data.get('ok')}")
+                logger.debug(f"响应: ok={data.get('ok')}")
 
                 if data.get("ok") == 1:
                     if "data" in data and "list" in data["data"]:
@@ -245,7 +245,7 @@ class WeiboCrawler:
                     for i, w in enumerate(weibo_list[:3]):
                         text = w.get("text", "")
                         text = re.sub(r'<[^>]+>', '', text)
-                        logger.info(f"  微博 {i}: ID={w.get('id')}, 内容={text[:50]}...")
+                        logger.debug(f"  微博 {i}: ID={w.get('id')}, 内容={text[:50]}...")
 
                     return weibo_list
                 elif data.get("ok") == -100:
@@ -309,7 +309,7 @@ class WeiboCrawler:
                 params["max_id"] = max_id
                 params["max_id_type"] = max_id_type
 
-            logger.info(f"获取评论第 {page + 1} 页，max_id={max_id}")
+            logger.debug(f"获取评论第 {page + 1} 页，max_id={max_id}")
             response = self._safe_request("GET", url, params=params)
             if not response:
                 break
@@ -325,7 +325,7 @@ class WeiboCrawler:
 
                 comments = data.get("data", [])
                 if not comments:
-                    logger.info("本页无评论，结束分页")
+                    logger.debug("本页无评论，结束分页")
                     break
 
                 self._enrich_comments(comments)
@@ -335,7 +335,7 @@ class WeiboCrawler:
                 next_max_id = data.get("max_id", 0)
                 next_max_id_type = data.get("max_id_type", 0)
                 if not next_max_id or str(next_max_id) == "0":
-                    logger.info("评论已到底，结束分页")
+                    logger.debug("评论已到底，结束分页")
                     break
                 max_id = next_max_id
                 max_id_type = next_max_id_type

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, asdict, field
 from typing import Dict, List, Optional, Tuple
 
-from config import CHINESE_NUMBERS, FILENAME_INVALID_CAST_KEYWORDS
+from config import CHINESE_NUMBERS, FILENAME_INVALID_CAST_KEYWORDS, INVALID_DIRECTOR_KEYWORDS, INVALID_WRITER_KEYWORDS
 from utils import safe_filename
 
 
@@ -131,16 +131,10 @@ class MovieInfo:
         # 单独角色（去掉已合并的人名）
         if self.director and self.director not in combined_names:
             director_clean = self.director.strip()
-            invalid_keywords = [
-                '中字', '语', '字', '导演', '主演', '高分', '热门', '冷门', '悬疑', '犯罪', '喜剧', '惊悚', '恐怖',
-                '动画', '纪录片', '剧情', '奇幻', '治愈', '音乐', '历史', '美食', '科幻', '动作', '爱情', '战争',
-                '传记', '运动', '儿童', '短片', '剧集', '电影', '作品', '日语', '中日', '双字', '字幕', '见平',
-                '推荐', '集', '季',
-            ]
             is_valid = (
                 director_clean
                 and len(director_clean) < 15
-                and not any(kw in director_clean for kw in invalid_keywords)
+                and not any(kw in director_clean for kw in INVALID_DIRECTOR_KEYWORDS)
                 and not director_clean.isdigit()
                 and not re.search(r'全\d+集|第\d+季', director_clean)
             )
@@ -153,7 +147,7 @@ class MovieInfo:
             is_valid = (
                 supervisor_clean
                 and len(supervisor_clean) < 15
-                and not any(kw in supervisor_clean for kw in invalid_keywords)
+                and not any(kw in supervisor_clean for kw in INVALID_DIRECTOR_KEYWORDS)
                 and not supervisor_clean.isdigit()
                 and not re.search(r'全\d+集|第\d+季', supervisor_clean)
             )
@@ -163,16 +157,10 @@ class MovieInfo:
 
         if self.writer and self.writer not in combined_names:
             writer_clean = self.writer.strip()
-            invalid_writer_keywords = [
-                '中字', '语', '字', '导演', '主演', '高分', '热门', '冷门', '悬疑', '犯罪', '喜剧', '惊悚', '恐怖',
-                '动画', '纪录片', '剧情', '奇幻', '治愈', '音乐', '历史', '美食', '科幻', '动作', '爱情', '战争',
-                '传记', '运动', '儿童', '短片', '剧集', '电影', '作品', '日语', '中日', '双字', '字幕', '见平',
-                '推荐', '全', '集', '季',
-            ]
             is_valid = (
                 writer_clean
                 and len(writer_clean) < 15
-                and not any(kw in writer_clean for kw in invalid_writer_keywords)
+                and not any(kw in writer_clean for kw in INVALID_WRITER_KEYWORDS)
                 and not writer_clean.isdigit()
             )
             if is_valid:

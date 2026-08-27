@@ -8,6 +8,7 @@ processed_weibo.json
 .douban_cache.json
 lobster.log
 chrome_cdp_debug.log
+chrome_weibo_cdp_debug.log
 result.txt
 result0.txt
 result1.txt
@@ -20,6 +21,7 @@ results_*.json
 
 # ===== 浏览器配置目录（含 Cookie）=====
 chrome_quark_profile/
+chrome_weibo_profile/
 tmp_chrome_test_profile/
 
 # ===== Python =====
