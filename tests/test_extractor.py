@@ -1381,3 +1381,102 @@ class TestMovieExtractor:
         assert info.subtitle == "中字"
         filename = info.generate_filename()
         assert "欧洲电影奖最佳影片提名作品 西拉丁语中字" in filename
+
+    def test_extract_tongxing_category(self, extractor):
+        # 回归：同性作为类别词（军靴男孩，热门高分喜剧同性剧集）
+        info = extractor.extract(
+            "《军靴男孩》\n热门高分喜剧同性剧集推荐\n全8集 英语中英双字\n见平👇",
+            "5335800000000010",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.category == "喜剧/同性"
+        filename = info.generate_filename()
+        assert "热门高分喜剧同性剧集 全8集" in filename
+
+    def test_extract_tiyu_category(self, extractor):
+        # 回归：体育作为类别词（传奇之师：新英格兰爱国者，冷门高分体育纪录剧集）
+        info = extractor.extract(
+            "《传奇之师：新英格兰爱国者》\n冷门高分体育纪录剧集推荐\n全10集 英语中字\n见平👇",
+            "5335800000000011",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.category == "体育/纪录"
+        filename = info.generate_filename()
+        assert "冷门高分体育纪录剧集 全10集" in filename
+
+    def test_extract_teddy_best_film_award(self, extractor):
+        # 回归：柏林电影节泰迪熊奖最佳电影提名作品完整保留（荧屏在发光）
+        info = extractor.extract(
+            "《荧屏在发光》\n柏林电影节泰迪熊奖最佳电影提名作品\n简·申布伦执导恐怖电影\n英语中英双字\n见平👇",
+            "5335800000000012",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.awards == "柏林电影节泰迪熊奖最佳电影提名作品"
+        filename = info.generate_filename()
+        assert "柏林电影节泰迪熊奖最佳电影提名作品 恐怖片" in filename
+
+    def test_extract_cannes_main_competition_best_screenplay_award(self, extractor):
+        # 回归：戛纳电影节主竞赛单元最佳编剧获奖作品（圣鹿之死），
+        # 单元名与提名/获奖之间的“最佳XX”此前不被识别导致奖项丢失
+        info = extractor.extract(
+            "《圣鹿之死》\n妮可·基德曼/科林·法瑞尔主演悬疑惊悚片\n戛纳电影节主竞赛单元最佳编剧获奖作品\n英语中英双字\n见平👇",
+            "5335800000000013",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节主竞赛单元最佳编剧获奖作品"
+        filename = info.generate_filename()
+        assert "戛纳电影节主竞赛单元最佳编剧获奖作品 悬疑惊悚片" in filename
+
+    def test_extract_golden_horse_original_screenplay_award(self, extractor):
+        # 回归：金马最佳原著剧本提名作品（该死的阿修罗），金马官方名为“原著剧本”
+        info = extractor.extract(
+            "《该死的阿修罗》\n金马最佳原著剧本提名作品\n国/闽南语中字\n见平👇",
+            "5335800000000014",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.awards == "金马最佳原著剧本提名作品"
+        filename = info.generate_filename()
+        assert "金马最佳原著剧本提名作品 国闽南语中字" in filename
+
+    def test_award_trailing_genre_stripped_and_genre_shown(self, extractor):
+        # 回归：圣丹斯电影节展映纪录片（权力背后）——奖项末尾“纪录片”剥离进 genre
+        # 后独立显示，与“洛迦诺电影节展映 纪录片”先例一致
+        info = extractor.extract(
+            "《权力背后》\n圣丹斯电影节展映纪录片\n英语中字\n见平👇",
+            "5335800000000015",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.genre == "纪录片"
+        filename = info.generate_filename()
+        assert "圣丹斯电影节展映 纪录片" in filename
+
+    def test_extract_included_season_with_language(self, extractor):
+        # 回归：“含中英双字第一季”（人生复本）——语言已单独提取，改写为“含第一季”
+        info = extractor.extract(
+            "《人生复本》\n乔尔·埃哲顿/詹妮弗·康纳利主演科幻剧集\n第二季首播至第一集\n含中英双字第一季\n见平👇",
+            "5335800000000016",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.season_extra == "第二季首播至第一集 含第一季"
+        assert info.subtitle == "中英双字"
+        filename = info.generate_filename()
+        assert "第二季首播至第一集 含第一季 中英双字" in filename
+
+    def test_extract_included_zhongzi_season_kept_verbatim(self, extractor):
+        # 回归：“含中字第一季”（女警出更）惯用语原样保留，不被语言剥离规则改写
+        info = extractor.extract(
+            "《女警出更》\n悬疑犯罪剧集\n第二季首播至第一集\n含中字第一季\n中字\n见平👇",
+            "5335800000000017",
+            "2026-08-28",
+        )
+        assert info is not None
+        assert info.season_extra == "第二季首播至第一集 含中字第一季"
+        filename = info.generate_filename()
+        assert "第二季首播至第一集 含中字第一季" in filename

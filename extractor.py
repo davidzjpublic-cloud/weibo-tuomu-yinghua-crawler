@@ -602,7 +602,7 @@ class MovieExtractor:
             r'(全\d+部)',
             r'(全\d+季\+番外\+花絮)',
             r'(全\d+季\+电影)',
-            r'(第[一二两三四五六七八九十\d]+季(?:首播至第[一二两三四五六七八九十\d]+集)?(?:\s+含中字(?:前|第)[一二两三四五六七八九十\d]+季)?)',
+            r'(第[一二两三四五六七八九十\d]+季(?:首播至第[一二两三四五六七八九十\d]+集)?(?:\s+含中字(?:前|第)[一二两三四五六七八九十\d]+季|\s+含[^\n，。:：]{0,8}?第[一二两三四五六七八九十\d]+季)?)',
             # 无季数、只有“首播至第X集/期”的连载状态（如 绿灯军团）
             r'(首播至第[一二两三四五六七八九十\d]+[集期])',
         ]
@@ -615,8 +615,15 @@ class MovieExtractor:
                     info.season_extra = captured
                     break
                 # 仅当捕获到除“第X季”之外的附加信息时才使用
-                if '首播' in captured or '含中字' in captured or '番外' in captured or '+电影' in captured:
+                if '首播' in captured or '含' in captured or '番外' in captured or '+电影' in captured:
                     info.season_extra = captured.replace('\n', ' ')
+                    # “含中英双字第一季”这类含语言/字幕的附带季说明，
+                    # 语言已单独提取，改写为“含第一季”（“含中字第X季”惯用语原样保留）
+                    info.season_extra = re.sub(
+                        r'含(?!中字)\S{0,8}?第([一二两三四五六七八九十\d]+季)',
+                        r'含第\1',
+                        info.season_extra,
+                    )
                     # 综艺“期”数用阿拉伯数字（如“首播至第五期”→“首播至第5期”）；
                     # “集”保持原样中文数字（如绿灯军团“首播至第一集”）
                     m = re.match(r'^(首播至第)([一二两三四五六七八九十\d]+)(期)$', info.season_extra)

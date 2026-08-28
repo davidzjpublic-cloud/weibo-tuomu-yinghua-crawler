@@ -251,6 +251,8 @@ class MovieInfo:
                 parts.append(year_str)
 
         bracket_parts = []
+        # 奖项末尾的类型词是否已剥离（剥离后 genre 改为独立显示）
+        genre_stripped_from_awards = False
 
         # 改编自类信息放在导演/主演之前
         if self.awards and self.awards.startswith('改编自'):
@@ -268,6 +270,7 @@ class MovieInfo:
             # 若奖项末尾与类型重复（如“洛迦诺电影节展映纪录片”+ genre“纪录片”），去掉末尾类型词
             if self.genre and awards_clean.endswith(self.genre):
                 awards_clean = awards_clean[:-len(self.genre)].rstrip()
+                genre_stripped_from_awards = True
             bracket_parts.append(awards_clean)
 
         # “X版”版本署名独立成段，置于获奖之后、出品方之前
@@ -291,8 +294,9 @@ class MovieInfo:
             filtered = [c for c in cat_parts if not (self.genre and (c in self.genre or self.genre in c))]
             if filtered:
                 combined.append(''.join(filtered))
-        # genre 显示条件（“无对白X”类整体类型词始终显示，如“无对白动画”）
-        show_genre = self.genre and (self.rating or self.category or self.genre.startswith("无对白") or (self.genre in ("剧集", "动画剧集") and (self.season or self.episodes or self.season_extra)))
+        # genre 显示条件（“无对白X”类整体类型词始终显示，如“无对白动画”；
+        # 奖项末尾的类型词已被剥离时 genre 单独显示，如“圣丹斯电影节展映 纪录片”）
+        show_genre = self.genre and (self.rating or self.category or self.genre.startswith("无对白") or genre_stripped_from_awards or (self.genre in ("剧集", "动画剧集") and (self.season or self.episodes or self.season_extra)))
         # category 已包含 genre 时不重复
         if show_genre and self.category and self.genre in self.category.replace('/', ''):
             show_genre = False
@@ -300,13 +304,15 @@ class MovieInfo:
         if show_genre and self.genre == "短片":
             show_genre = False
         # 奖项本身已含“纪录”且无额外评级时，不再重复显示 genre
-        # （含“纪录长片”这类变体，如“奥斯卡最佳纪录长片获奖作品”）
+        # （含“纪录长片”这类变体，如“奥斯卡最佳纪录长片获奖作品”；
+        # 末尾“纪录片”已被剥离进 genre 的情形除外）
         if (
             show_genre
             and self.genre == "纪录片"
             and self.awards
             and "纪录" in self.awards
             and not self.rating
+            and not genre_stripped_from_awards
         ):
             show_genre = False
         if show_genre and self.genre:
