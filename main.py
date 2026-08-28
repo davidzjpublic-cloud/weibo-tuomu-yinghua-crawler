@@ -211,6 +211,8 @@ class Lobster:
         self.save_dir = save_dir
         self.results: List[MovieInfo] = []
         self.seen_weibo_ids: set = set()
+        # 本次运行已转存成功的文件数（用于控制台逐条带序号回显）
+        self.transfer_count = 0
 
         # 加载已处理 ID（未启用 --skip-processed 时仅用于展示，不用于跳过）
         self.crawler.load_processed_ids(processed_file)
@@ -474,6 +476,11 @@ class Lobster:
         if failed:
             raise RuntimeError(f"转存或重命名失败: {failed}")
 
+        # 每形成一个最终转存文件名即带序号完整回显到控制台
+        for item in items:
+            self.transfer_count += 1
+            print(f"转存 {self.transfer_count}. {item['final_name']}")
+
         logging.info(f"转存完成: {len(save_results)}/{len(save_results)} 项成功")
 
         # 上传微博配图到被转存的文件夹内（如果分享被保存为子文件夹）
@@ -652,7 +659,12 @@ def main() -> None:
             print(f"   链接: {info.source_link}")
         print(f"   文件名: {info.generate_filename()}")
 
+    saved_count = sum(1 for r in results if r.saved)
     print(f"\n总运行时间: {lobster._format_elapsed(elapsed)}")
+    if args.save:
+        print(f"共抓取影视作品 {len(results)} 部，转存成功 {saved_count} 部")
+    else:
+        print(f"共抓取影视作品 {len(results)} 部（未启用 --save，不做转存）")
 
 
 if __name__ == "__main__":
