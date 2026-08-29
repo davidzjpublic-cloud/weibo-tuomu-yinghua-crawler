@@ -1480,3 +1480,54 @@ class TestMovieExtractor:
         assert info.season_extra == "第二季首播至第一集 含中字第一季"
         filename = info.generate_filename()
         assert "第二季首播至第一集 含中字第一季" in filename
+
+    def test_extract_venice_fipresci_award(self, extractor):
+        # 回归：威尼斯电影节费比西奖获奖作品（厚望）
+        info = extractor.extract(
+            "《厚望》\n威尼斯电影节费比西奖获奖作品\n迈克·李导演作品\n英语中字\n见平👇",
+            "5335800000000018",
+            "2026-08-29",
+        )
+        assert info is not None
+        assert info.awards == "威尼斯电影节费比西奖获奖作品"
+        filename = info.generate_filename()
+        assert "威尼斯电影节费比西奖获奖作品" in filename
+
+    def test_extract_adapted_from_narrative_poem(self, extractor):
+        # 回归：改编自同名叙事诗（午宴之歌）——改编尾词交替项含“叙事诗”
+        info = extractor.extract(
+            "《午宴之歌》\n艾玛·汤普森/艾伦·瑞克曼主演电影\n改编自同名叙事诗\n英语中英双字\n见平👇",
+            "5335800000000019",
+            "2026-08-29",
+        )
+        assert info is not None
+        assert info.awards == "改编自同名叙事诗"
+        filename = info.generate_filename()
+        assert "（改编自同名叙事诗 艾玛·汤普森、艾伦·瑞克曼主演" in filename
+
+    def test_extract_gotham_award(self, extractor):
+        # 回归：哥谭独立电影奖最佳纪录片提名作品（波士顿市政厅）——官方名无“节”，照抄原文
+        info = extractor.extract(
+            "《波士顿市政厅》\n哥谭独立电影奖最佳纪录片提名作品\n弗雷德里克·怀斯曼导演作品\n英语中英双字\n见平👇",
+            "5335800000000020",
+            "2026-08-29",
+        )
+        assert info is not None
+        assert info.awards == "哥谭独立电影奖最佳纪录片提名作品"
+        # 奖项中已含“纪录”，genre“纪录片”按惯例不重复显示
+        filename = info.generate_filename()
+        assert "哥谭独立电影奖最佳纪录片提名作品 英语中英双字" in filename
+
+    def test_extract_bucheon_netpac_and_golden_horse_cinematography(self, extractor):
+        # 回归：富川奇幻电影节亚洲电影促进联盟大奖 + 金马最佳摄影双奖项（青春并不温柔）
+        # 按原文顺序输出；奖项行中的“奇幻”不再误入类别
+        info = extractor.extract(
+            "《青春并不温柔》\n富川奇幻电影节亚洲电影促进联盟大奖获奖作品\n金马最佳摄影提名作品\n国语中英双字\n见平👇",
+            "5335800000000021",
+            "2026-08-29",
+        )
+        assert info is not None
+        assert info.awards == "富川奇幻电影节亚洲电影促进联盟大奖获奖作品 金马最佳摄影提名作品"
+        assert info.category is None
+        filename = info.generate_filename()
+        assert "（富川奇幻电影节亚洲电影促进联盟大奖获奖作品 金马最佳摄影提名作品" in filename

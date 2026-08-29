@@ -449,7 +449,7 @@ class MovieExtractor:
         adaptation_match = re.search(r'(改编自[^《》]{0,20}《[^》]+》)', text)
         if not adaptation_match:
             adaptation_match = re.search(
-                r'(改编自[^《》\n]{0,30}?(?:原著(?:小说)?|小说|漫画|游戏)(?:\s*\d{4}版)?)',
+                r'(改编自[^《》\n]{0,30}?(?:原著(?:小说)?|小说|漫画|游戏|叙事诗)(?:\s*\d{4}版)?)',
                 text,
             )
         if adaptation_match:
