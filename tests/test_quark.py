@@ -267,6 +267,7 @@ class TestQuarkClient:
                 },
             }
         )
+        quark_client._cleanup_duplicate_saves = MagicMock()
         saved = quark_client.save_share_files(
             "https://pan.quark.cn/s/abc123",
             [{"fid": "fid1", "share_fid_token": "tok1"}],
@@ -275,6 +276,102 @@ class TestQuarkClient:
         assert len(saved) == 1
         assert saved[0]["fid"] == "saved1"
         assert saved[0]["original_fid"] == "fid1"
+
+    def test_save_share_files_timeout_adopts_existing(self, quark_client):
+        # 回归：转存 POST 读超时但服务端已生效（单身指南 08-31 事件）——
+        # 目标目录出现分享原名目录时应复用它，而不是重发 POST 造成重复转存
+        quark_client._get_share_info = MagicMock(
+            return_value={"data": {"stoken": "token123"}}
+        )
+        quark_client._get_share_fid_token_map = MagicMock(
+            return_value={"fid1": "tok1"}
+        )
+        quark_client._drive_request = MagicMock(return_value=None)
+        quark_client.list_all_my_files = MagicMock(
+            return_value=[{"fid": "existing1", "file_name": "单身指南2016"}]
+        )
+        quark_client.delete_files = MagicMock(return_value=True)
+
+        saved = quark_client.save_share_files(
+            "https://pan.quark.cn/s/abc123",
+            [{"fid": "fid1", "share_file_name": "单身指南2016", "file_name": "单身指南"}],
+            "target_dir_fid",
+        )
+        assert saved == [{
+            "fid": "existing1",
+            "original_fid": "fid1",
+            "file_name": "单身指南",
+        }]
+        # 只发过一次转存 POST，没有盲目重发
+        assert quark_client._drive_request.call_count == 1
+        # 唯一同名项即复用项，无需清理
+        quark_client.delete_files.assert_not_called()
+
+    def test_save_share_files_timeout_without_existing_retries(self, quark_client):
+        # 超时且目标目录无同名项（请求未达服务端）→ 正常重试，第二次成功
+        quark_client._get_share_info = MagicMock(
+            return_value={"data": {"stoken": "token123"}}
+        )
+        quark_client._get_share_fid_token_map = MagicMock(
+            return_value={"fid1": "tok1"}
+        )
+        success = {
+            "code": 0,
+            "data": {
+                "task_resp": {
+                    "code": 0,
+                    "data": {"save_as": {"save_as_top_fids": ["saved1"]}},
+                },
+            },
+        }
+        quark_client._drive_request = MagicMock(side_effect=[None, success])
+        quark_client.list_all_my_files = MagicMock(return_value=[])
+        quark_client._cleanup_duplicate_saves = MagicMock()
+
+        saved = quark_client.save_share_files(
+            "https://pan.quark.cn/s/abc123",
+            [{"fid": "fid1", "share_file_name": "单身指南2016", "file_name": "单身指南"}],
+            "target_dir_fid",
+        )
+        assert len(saved) == 1
+        assert saved[0]["fid"] == "saved1"
+        assert quark_client._drive_request.call_count == 2
+
+    def test_save_share_files_success_cleans_orphan_duplicate(self, quark_client):
+        # 成功转存后，清理此前超时尝试遗留的同名副本
+        quark_client._get_share_info = MagicMock(
+            return_value={"data": {"stoken": "token123"}}
+        )
+        quark_client._get_share_fid_token_map = MagicMock(
+            return_value={"fid1": "tok1"}
+        )
+        quark_client._drive_request = MagicMock(
+            return_value={
+                "code": 0,
+                "data": {
+                    "task_resp": {
+                        "code": 0,
+                        "data": {"save_as": {"save_as_top_fids": ["saved1"]}},
+                    },
+                },
+            }
+        )
+        quark_client.list_all_my_files = MagicMock(
+            return_value=[
+                {"fid": "saved1", "file_name": "单身指南2016"},
+                {"fid": "orphan1", "file_name": "单身指南2016"},
+            ]
+        )
+        quark_client.delete_files = MagicMock(return_value=True)
+
+        saved = quark_client.save_share_files(
+            "https://pan.quark.cn/s/abc123",
+            [{"fid": "fid1", "share_file_name": "单身指南2016", "file_name": "单身指南"}],
+            "target_dir_fid",
+        )
+        assert len(saved) == 1
+        assert saved[0]["fid"] == "saved1"
+        quark_client.delete_files.assert_called_once_with(["orphan1"])
 
     def test_rename_file_success(self, quark_client):
         quark_client._drive_request = MagicMock(

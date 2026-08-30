@@ -532,6 +532,68 @@ class QuarkClient:
                 token_map[fid] = token
         return token_map
 
+    def _find_saved_by_name(
+        self,
+        to_dir_fid: str,
+        items: List[Dict],
+    ) -> Optional[List[Dict]]:
+        """在目标目录中按分享原名查找已转存项（转存超时防重复用）。
+
+        转存请求超时但服务端已生效时，目标目录会出现与分享根文件夹同名
+        的目录。所有 item 都能按（share_file_name 优先，file_name 兜底）
+        找到同名项时返回与 save_share_files 相同结构的结果，否则 None。
+        """
+        children = self.list_all_my_files(to_dir_fid, size=100)
+        results = []
+        for item in items:
+            expected = item.get("share_file_name") or item.get("file_name")
+            if not expected:
+                return None
+            found = next(
+                (
+                    c for c in children
+                    if c.get("file_name") == expected and c.get("fid")
+                ),
+                None,
+            )
+            if not found:
+                return None
+            results.append({
+                "fid": found["fid"],
+                "original_fid": item.get("fid"),
+                "file_name": item.get("file_name"),
+            })
+        return results
+
+    def _cleanup_duplicate_saves(
+        self,
+        to_dir_fid: str,
+        items: List[Dict],
+        keep_fids: List[str],
+    ) -> None:
+        """清理转存窗口内遗留的同名重复目录。
+
+        转存 POST 超时但服务端已生效时，重试会产生未改名的同名副本；
+        调用方（main.py）转存前已删除目标目录中的同名项，因此这里同名
+        且不在 keep_fids 中的目录必然是本次转存窗口的遗留，直接删除。
+        """
+        expected_names = {
+            item.get("share_file_name") or item.get("file_name")
+            for item in items
+        } - {None, ""}
+        if not expected_names:
+            return
+        children = self.list_all_my_files(to_dir_fid, size=100)
+        dup_fids = [
+            c["fid"] for c in children
+            if c.get("file_name") in expected_names
+            and c.get("fid") not in keep_fids
+        ]
+        if dup_fids:
+            names = [c.get("file_name") for c in children if c.get("fid") in dup_fids]
+            logger.warning(f"清理超时重试遗留的重复转存: {names}")
+            self.delete_files(dup_fids)
+
     def save_share_files(
         self,
         share_url: str,
@@ -586,12 +648,15 @@ class QuarkClient:
                 "scene": "link",
                 "pdir_save_all": False,
             }
+            # 转存 POST 非幂等：禁用 _request 的内层自动重试（retries=1），
+            # 由本方法的超时探测逻辑决定是否重发，避免服务端已生效时重复转存
             data = self._drive_request(
                 "POST",
                 url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=120,
+                timeout=180,
+                retries=1,
             )
 
             if data and data.get("code") == 0:
@@ -614,7 +679,26 @@ class QuarkClient:
                     })
 
                 logger.info(f"转存成功 {len(results)} 项到 {to_dir_fid}")
+                if results:
+                    # 早前超时的尝试可能已在服务端生效，留下未改名副本，清掉
+                    self._cleanup_duplicate_saves(
+                        to_dir_fid, items, [r["fid"] for r in results]
+                    )
                 return results
+
+            # 网络层失败（读超时等）时请求可能已在服务端生效：
+            # 先按分享原名探测目标目录，找到即复用，避免重发造成重复转存
+            if data is None:
+                adopted = self._find_saved_by_name(to_dir_fid, items)
+                if adopted is not None:
+                    logger.warning(
+                        "转存请求超时但服务端已生效，复用目标目录中已转存项: "
+                        + ", ".join(r["fid"] for r in adopted)
+                    )
+                    self._cleanup_duplicate_saves(
+                        to_dir_fid, items, [r["fid"] for r in adopted]
+                    )
+                    return adopted
 
             # 判断是否需要重试
             msg = (data or {}).get("message", "")
