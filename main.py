@@ -16,7 +16,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from config import (
     DEFAULT_CONFIG_FILE,
@@ -487,39 +487,148 @@ class Lobster:
         if image_name:
             final_names = {html.unescape(item["final_name"]) for item in items}
             image_target_fid = target_fid
+            image_target_name = None
             for child in client.list_all_my_files(target_fid, size=100):
                 if (
                     html.unescape(child.get("file_name", "")) in final_names
                     and child.get("file_type") == 0
                 ):
                     image_target_fid = child["fid"]
+                    image_target_name = html.unescape(child.get("file_name", ""))
                     logging.debug(f"微博图片将上传到子文件夹: {child.get('file_name')}")
                     break
 
-            # 配图是附属品：下载/上传失败只告警跳过，不影响已完成的转存结果，
-            # 更不能中断整个运行（曾因网络瞬断在这里炸掉整晚批次）
-            img_fid = None
-            for attempt in range(3):
-                try:
-                    img_resp = self.crawler.session.get(first_url, timeout=30)
-                    img_resp.raise_for_status()
-                    img_fid = client.upload_file(
-                        img_resp.content,
-                        image_name,
-                        image_target_fid,
-                    )
-                    break
-                except Exception as e:
-                    logging.warning(
-                        f"微博图片下载/上传失败（第 {attempt + 1}/3 次）: {e}"
-                    )
-                    time.sleep(5)
+            # 配图是附属品：下载/上传失败只告警并转入待补传队列，不影响已完成的
+            # 转存结果，更不能中断整个运行（曾因网络瞬断在这里炸掉整晚批次）
+            img_fid = self._upload_image_with_retry(
+                first_url, image_name, image_target_fid
+            )
             if img_fid:
                 logging.info(f"微博图片上传成功: {image_name} (fid={img_fid})")
             else:
-                logging.warning(f"微博图片多次失败，跳过: {image_name}")
+                logging.warning(f"微博图片多次失败，转入待补传队列: {image_name}")
+                self._record_failed_image({
+                    "image_url": first_url,
+                    "image_name": image_name,
+                    "save_dir": self.save_dir,
+                    "folder_name": image_target_name,
+                })
 
         return True
+
+    def _upload_image_with_retry(
+        self,
+        image_url: str,
+        image_name: str,
+        target_fid: str,
+    ) -> Optional[str]:
+        """下载微博图片并上传到指定目录，3 次尝试（5s/30s 退避），返回 fid 或 None。"""
+        client = self.crawler.quark_client
+        for attempt in range(3):
+            try:
+                img_resp = self.crawler.session.get(image_url, timeout=30)
+                img_resp.raise_for_status()
+                fid = client.upload_file(img_resp.content, image_name, target_fid)
+                if fid:
+                    return fid
+                logging.warning(
+                    f"微博图片上传未返回 fid（第 {attempt + 1}/3 次）: {image_name}"
+                )
+            except Exception as e:
+                logging.warning(
+                    f"微博图片下载/上传失败（第 {attempt + 1}/3 次）: {e}"
+                )
+            if attempt < 2:
+                time.sleep(5 if attempt == 0 else 30)
+        return None
+
+    @property
+    def _failed_images_path(self) -> Path:
+        """失败配图持久化文件（与结果输出同目录），用于跨运行补传。"""
+        return Path(self.output_json).parent / "failed_images.json"
+
+    def _load_failed_images(self) -> List[Dict]:
+        try:
+            with open(self._failed_images_path, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+            return entries if isinstance(entries, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _save_failed_images(self, entries: List[Dict]) -> None:
+        self._failed_images_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._failed_images_path, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+
+    def _record_failed_image(self, entry: Dict) -> None:
+        """记录上传失败的微博配图，待本运行末尾或下次运行补传。"""
+        entries = self._load_failed_images()
+        if any(e.get("image_name") == entry.get("image_name") for e in entries):
+            return
+        entries.append(entry)
+        self._save_failed_images(entries)
+
+    def _retry_failed_images(self) -> None:
+        """补传此前失败的微博配图（output/failed_images.json）。
+
+        代理瞬断等网络故障窗口可能长于单次运行的重试耐心（如 08-31 凌晨
+        咒怨配图连续 3x3 次失败），持久化后由本运行末尾及后续运行兜底。
+        """
+        entries = self._load_failed_images()
+        if not entries:
+            return
+
+        client = self.crawler.quark_client
+        logging.info(f"开始补传此前失败的微博配图 {len(entries)} 张...")
+        remaining = []
+        for entry in entries:
+            image_name = entry.get("image_name", "")
+            try:
+                root = client.find_or_create_dir(entry.get("save_dir") or self.save_dir)
+                target_fid = None
+                if root:
+                    folder_name = entry.get("folder_name")
+                    if folder_name:
+                        # 转存目录可能已被改名/移动，按目录名在保存根目录下重新定位
+                        for child in client.list_all_my_files(root, size=100):
+                            if (
+                                html.unescape(child.get("file_name", "")) == folder_name
+                                and child.get("file_type") == 0
+                            ):
+                                target_fid = child["fid"]
+                                break
+                    else:
+                        target_fid = root
+                if not target_fid:
+                    logging.warning(
+                        f"补传跳过（找不到目标目录，保留待下次）: {image_name}"
+                        f" -> {entry.get('folder_name')}"
+                    )
+                    remaining.append(entry)
+                    continue
+
+                existing = client.list_all_my_files(target_fid, size=100)
+                if any(f.get("file_name") == image_name for f in existing):
+                    logging.info(f"补传完成（图片已存在）: {image_name}")
+                    continue
+
+                fid = self._upload_image_with_retry(
+                    entry.get("image_url", ""), image_name, target_fid
+                )
+                if fid:
+                    logging.info(f"补传成功: {image_name} (fid={fid})")
+                else:
+                    logging.warning(f"补传仍失败，保留待下次: {image_name}")
+                    remaining.append(entry)
+            except Exception as e:
+                logging.warning(f"补传异常，保留待下次: {image_name} -> {e}")
+                remaining.append(entry)
+
+        self._save_failed_images(remaining)
+        if len(remaining) < len(entries):
+            logging.info(
+                f"补传结束：成功 {len(entries) - len(remaining)} 张，待补 {len(remaining)} 张"
+            )
 
     def run(self) -> List[MovieInfo]:
         """运行爬虫。"""
@@ -564,6 +673,13 @@ class Lobster:
             if page_dates and all(d < target_date_obj for d in page_dates):
                 logging.info("该页微博全部早于目标日期，已翻过目标，停止")
                 break
+
+        # 本运行末尾兜底补传此前失败的微博配图（含本运行与历史运行遗留）
+        if self.save_enabled:
+            try:
+                self._retry_failed_images()
+            except Exception as e:
+                logging.error(f"补传失败微博配图异常（不影响主流程）: {e}")
 
         self._save_results()
         elapsed = time.perf_counter() - start_time
