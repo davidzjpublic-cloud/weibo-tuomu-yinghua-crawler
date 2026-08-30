@@ -1531,3 +1531,99 @@ class TestMovieExtractor:
         assert info.category is None
         filename = info.generate_filename()
         assert "（富川奇幻电影节亚洲电影促进联盟大奖获奖作品 金马最佳摄影提名作品" in filename
+
+    def test_extract_rotterdam_tiger_award(self, extractor):
+        # 回归：鹿特丹电影节老虎奖最佳影片提名作品（麻木）
+        info = extractor.extract(
+            "《麻木》\n鹿特丹电影节老虎奖最佳影片提名作品\n波斯语中字\n见平👇",
+            "5335800000000022",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.awards == "鹿特丹电影节老虎奖最佳影片提名作品"
+        filename = info.generate_filename()
+        assert "鹿特丹电影节老虎奖最佳影片提名作品" in filename
+
+    def test_extract_cannes_jury_grand_prize_without_zuijia(self, extractor):
+        # 回归：戛纳主竞赛单元评审团大奖（母亲与娼妓）——“评审团大奖”可不带“最佳”前缀
+        info = extractor.extract(
+            "《母亲与娼妓》\n让·厄斯塔什执导 让-皮埃尔·利奥德主演电影\n戛纳电影节主竞赛单元评审团大奖获奖作品\n法语中字\n见平👇",
+            "5335800000000023",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节主竞赛单元评审团大奖获奖作品"
+        assert info.director == "让·厄斯塔什"
+        filename = info.generate_filename()
+        assert "戛纳电影节主竞赛单元评审团大奖获奖作品" in filename
+
+    def test_extract_venice_orizzonti_award(self, extractor):
+        # 回归：威尼斯电影节地平线单元奖最佳影片提名作品（愚行录）
+        info = extractor.extract(
+            "《愚行录》\n威尼斯电影节地平线单元奖最佳影片提名作品\n妻夫木聪/满岛光主演电影\n日语中字\n见平👇",
+            "5335800000000024",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.awards == "威尼斯电影节地平线单元奖最佳影片提名作品"
+        filename = info.generate_filename()
+        assert "威尼斯电影节地平线单元奖最佳影片提名作品" in filename
+
+    def test_slash_language_combo_verbatim(self, extractor):
+        # 回归：斜杠组合语言照抄原文去斜杠（一千次晚安 挪威/英语、冲突 英/西/意语），
+        # 不把“挪威”补成“挪威语”、“英”补成“英语”（与 SLASH_REPLACEMENTS 表风格一致）
+        info = extractor.extract(
+            "《一千次晚安》\n朱丽叶·比诺什主演电影\n挪威/英语中英双字\n见平👇",
+            "5335800000000025",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.language == "挪威英语"
+        assert info.subtitle == "中英双字"
+
+        info2 = extractor.extract(
+            "《冲突》\n阿尔·帕西诺主演 西德尼·吕美特导演作品\n英/西/意语中英双字\n见平👇",
+            "5335800000000026",
+            "2026-08-30",
+        )
+        assert info2 is not None
+        assert info2.language == "英西意语"
+        assert info2.subtitle == "中英双字"
+
+    def test_slash_language_indi_english_frozen_spelling(self, extractor):
+        # 回归：铁道人“印地/英语”历史拼法为“印地语英语”，按 08-16 基准冻结在表中
+        info = extractor.extract(
+            "《铁道人》\n高分惊悚历史剧集\n全4集 印地/英语中字\n见平👇",
+            "5335800000000027",
+            "2026-08-16",
+        )
+        assert info is not None
+        assert info.language == "印地语英语"
+
+    def test_extract_director_with_genre_word_before_type(self, extractor):
+        # 回归：“三宅唱导演恐怖剧集作品”（咒怨：诅咒之家）——
+        # 导演与“剧集作品”之间可夹类型词，人名照常提取
+        info = extractor.extract(
+            "《咒怨:诅咒之家》\n三宅唱导演恐怖剧集作品\n全6集 日语中字\n见平👇",
+            "5335800000000028",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.director == "三宅唱"
+        assert info.category == "恐怖"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "三宅唱导演 恐怖剧集 全6集" in filename
+
+    def test_extract_documentary_short_combined_genre(self, extractor):
+        # 回归：“高分纪录短片”（房屋是黑的）——纪录短片整体作为组合类型词
+        info = extractor.extract(
+            "《房屋是黑的》\n芙茹弗·法洛克扎德执导高分纪录短片\n波斯语中字\n见平👇",
+            "5335800000000029",
+            "2026-08-30",
+        )
+        assert info is not None
+        assert info.genre == "纪录短片"
+        # 类别“短片/纪录”与 genre 互含，生成文件名时整体过滤，仅显示组合类型词
+        filename = info.generate_filename()
+        assert "高分纪录短片" in filename

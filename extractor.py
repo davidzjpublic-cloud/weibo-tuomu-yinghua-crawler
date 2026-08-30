@@ -52,7 +52,7 @@ class MovieExtractor:
         )
 
     def _resolve_lang_part(self, lang_part: str) -> Optional[str]:
-        """解析字幕词前的语言片段，斜杠/顿号组合归一化为连写形式。
+        """解析字幕词前的语言片段，斜杠/顿号组合去分隔符后照抄原文连写。
 
         无法解析为已知语言时返回 None，避免把人名列表等无关前文误当作语言。
         """
@@ -69,10 +69,14 @@ class MovieExtractor:
         parts = re.split(r'[/、]+', lang_part)
         resolved = []
         for seg in parts:
-            if seg in self._lang_units:
+            if (
+                seg in self._lang_units
+                or seg + '语' in self._lang_units
+                or seg.endswith('语')
+            ):
+                # 与 SLASH_REPLACEMENTS 表风格一致：各段照抄原文，
+                # 不把“挪威”补成“挪威语”、“英”补成“英语”
                 resolved.append(seg)
-            elif seg + '语' in self._lang_units:
-                resolved.append(seg + '语')
             else:
                 return None
         return ''.join(resolved)
@@ -222,8 +226,10 @@ class MovieExtractor:
         if not info.director:
             director_candidates = []
             director_positions = []
+            # “导演”与“剧集作品”等类型词之间可夹类型形容（如“三宅唱导演恐怖剧集作品”）
+            genre_alt = '|'.join(re.escape(g) for g in self.categories)
             for m in re.finditer(
-                r'([^《》\n\s]{2,15}?)导演(?:(?:高分|热门|冷门)?(?:电影|剧集|纪录片|动画)?作品|作品|电影|剧集|纪录片|动画|推荐|全\d+集|第\d+季|\s|$)',
+                rf'([^《》\n\s]{{2,15}}?)导演(?:(?:高分|热门|冷门)?(?:{genre_alt})?(?:电影|剧集|纪录片|动画)?作品|作品|电影|剧集|纪录片|动画|推荐|全\d+集|第\d+季|\s|$)',
                 text,
             ):
                 director_candidates.append(m.group(1).strip())
@@ -645,6 +651,9 @@ class MovieExtractor:
             info.genre = re.search(r'无对白(?:纪录片|短片|动画)', text).group(0)
         elif "纪录片" in text or "纪录长片" in text:
             info.genre = "纪录片"
+        elif "纪录短片" in text:
+            # “纪录短片”为组合类型词（如“高分纪录短片”），整体作为 genre
+            info.genre = "纪录短片"
         elif "短片" in text:
             info.genre = "短片"
         elif "真人秀" in text:
