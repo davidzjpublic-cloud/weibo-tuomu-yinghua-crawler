@@ -58,6 +58,9 @@ class MovieExtractor:
         """
         if not lang_part:
             return None
+        if lang_part.startswith('已出'):
+            # “已出英/法语中字”的“已出”是状态词（字幕已出），不属于语言名
+            lang_part = lang_part[2:]
         if '/' not in lang_part and '、' not in lang_part:
             if (
                 lang_part in self._lang_units
@@ -663,7 +666,13 @@ class MovieExtractor:
         elif "综艺" in text:
             # 综艺节目作为类型词（如“冷门高分综艺推荐”）
             info.genre = "综艺"
-        elif "剧集" in text:
+        elif "剧集" in text or re.search(
+            '(?:' + '|'.join(
+                re.escape(g) for g in self.categories if g not in ('音乐', '歌舞')
+            ) + r')剧(?!情|场|照|本|终)', text
+        ):
+            # “悬疑剧”这类“类型+剧”连写视作剧集（伴人而生）；
+            # 音乐剧/歌舞剧是电影类型而非剧集（玛蒂尔达：音乐剧），排除
             info.genre = "剧集"
         elif re.search(r'(?<![A-Za-z])SP(?![A-Za-z])', text):
             # 日剧/日综特别篇“SP”（如“治愈SP推荐”），作为类型替代默认“片”

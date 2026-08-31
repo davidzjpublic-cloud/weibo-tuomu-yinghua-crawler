@@ -271,7 +271,9 @@ class MovieInfo:
             if self.genre and awards_clean.endswith(self.genre):
                 awards_clean = awards_clean[:-len(self.genre)].rstrip()
                 genre_stripped_from_awards = True
-            bracket_parts.append(awards_clean)
+            # 奖项文本中的半角“/”全角化（金球奖最佳限定剧/电视电影），
+            # 与夸克重命名后的目录名保持一致；片名中的“/”不受影响（19/20 成年初体验）
+            bracket_parts.append(awards_clean.replace('/', '／'))
 
         # “X版”版本署名独立成段，置于获奖之后、出品方之前
         if self.version_credit:

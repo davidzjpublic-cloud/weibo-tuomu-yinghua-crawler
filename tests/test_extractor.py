@@ -1627,3 +1627,136 @@ class TestMovieExtractor:
         # 类别“短片/纪录”与 genre 互含，生成文件名时整体过滤，仅显示组合类型词
         filename = info.generate_filename()
         assert "高分纪录短片" in filename
+
+    def test_goya_best_spanish_foreign_film(self, extractor):
+        # 回归：烈焰焚币“西班牙戈雅奖最佳西班牙语外国片获奖作品”（09-01 基准）
+        info = extractor.extract(
+            "《烈焰焚币》\n莱昂纳多·斯巴拉格利亚主演\n西班牙戈雅奖最佳西班牙语外国片获奖作品\n西班牙语中字\n见平👇",
+            "5335800000031",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.awards == "西班牙戈雅奖最佳西班牙语外国片获奖作品"
+
+    def test_golden_globe_limited_series_tv_movie(self, extractor):
+        # 回归：迷恋荷尔蒙“金球奖最佳限定剧/电视电影提名作品”（09-01 基准）——
+        # 原文半角斜杠，文件名中全角化（与夸克重命名后的目录名一致）
+        info = extractor.extract(
+            "《迷恋荷尔蒙》\n金球奖最佳限定剧/电视电影提名作品\n李·佩斯主演高分爱情犯罪电影\n英语中英双字\n见平👇",
+            "5335800000032",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.awards == "金球奖最佳限定剧/电视电影提名作品"
+        assert "金球奖最佳限定剧／电视电影提名作品" in info.generate_filename()
+
+    def test_tribeca_festival_screened_work(self, extractor):
+        # 回归：静音重生“翠贝卡电影节展映电影作品”（09-01 基准）
+        info = extractor.extract(
+            "《静音重生》\n翠贝卡电影节展映电影作品\n已出英/法语中字\n见平👇",
+            "5335800000033",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.awards == "翠贝卡电影节展映电影作品"
+
+    def test_afi_annual_best_films(self, extractor):
+        # 回归：她说“美国电影学会奖年度佳片获奖作品”（09-01 基准）
+        info = extractor.extract(
+            "《她说》\n美国电影学会奖年度佳片获奖作品\n英语中英双字\n见平👇",
+            "5335800000034",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.awards == "美国电影学会奖年度佳片获奖作品"
+
+    def test_trilogy_credit_after_oscar(self, extractor):
+        # 回归：凯尔经的秘密““爱尔兰民俗三部曲”之一”（09-01 基准）——
+        # 描述性系列荣誉，排在奥斯卡奖项之后
+        info = extractor.extract(
+            "《凯尔经的秘密》\n奥斯卡金像奖最佳动画长片提名作品\n“爱尔兰民俗三部曲”之一\n英语中英双字\n见平👇",
+            "5335800000035",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert "奥斯卡金像奖最佳动画长片提名作品" in info.awards
+        assert "“爱尔兰民俗三部曲”之一" in info.awards
+        filename = info.generate_filename()
+        assert "奥斯卡金像奖最佳动画长片提名作品 “爱尔兰民俗三部曲”之一" in filename
+
+    def test_slash_language_indonesian_english(self, extractor):
+        # 回归：杀戮演绎“印尼/英语中英双字”→ 印尼英语（09-01 基准，印尼语入表）
+        info = extractor.extract(
+            "《杀戮演绎》\n奥斯卡金像奖最佳纪录长片提名作品\n印尼/英语中英双字\n见平👇",
+            "5335800000036",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.language == "印尼英语"
+        assert info.subtitle == "中英双字"
+
+    def test_yichu_prefix_stripped_from_language(self, extractor):
+        # 回归：静音重生“已出英/法语中字”——“已出”是状态词，不属于语言名
+        info = extractor.extract(
+            "《静音重生》\n翠贝卡电影节展映电影作品\n已出英/法语中字\n见平👇",
+            "5335800000037",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.language == "英法语"
+        assert info.subtitle == "中字"
+
+    def test_yichu_prefix_stripped_single_language(self, extractor):
+        # “已出日语中字”同样剥离“已出”（推理竞技场形态）
+        info = extractor.extract(
+            "《推理竞技场》\n冷门高分电影推荐\n已出日语中字\n见平👇",
+            "5335800000038",
+            "2026-08-15",
+        )
+        assert info is not None
+        assert info.language == "日语"
+        assert info.subtitle == "中字"
+
+    def test_genre_word_plus_ju_is_series(self, extractor):
+        # 回归：伴人而生“主演悬疑剧”+“全12集”——“类型+剧”连写视作剧集
+        info = extractor.extract(
+            "《伴人而生》\n水上恒司/山田杏奈主演悬疑剧\n全12集 日语中日双字\n见平👇",
+            "5335800000039",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.genre == "剧集"
+        assert info.category == "悬疑"
+        filename = info.generate_filename()
+        assert "悬疑剧集 全12集" in filename
+
+    def test_musical_stays_movie_not_series(self, extractor):
+        # 回归：玛蒂尔达“高分喜剧歌舞片推荐”——音乐剧/歌舞剧是电影类型，
+        # 不得因“类型+剧”规则误判为剧集
+        info = extractor.extract(
+            "《玛蒂尔达:音乐剧》\n高分喜剧歌舞片推荐\n英语中字\n见平👇",
+            "5335800000040",
+            "2026-08-22",
+        )
+        assert info is not None
+        assert info.genre == "电影"
+
+    def test_musical_stage_rec_stays_movie(self, extractor):
+        # 回归：悲惨世界“热门高分音乐剧现场推荐”——剧场现场音乐剧电影
+        info = extractor.extract(
+            "《悲惨世界:十周年纪念演唱会》\n热门高分音乐剧现场推荐\n英语中字\n见平👇",
+            "5335800000041",
+            "2026-08-25",
+        )
+        assert info is not None
+        assert info.genre == "电影"
+
+    def test_genre_plus_ju_blocked_by_following_words(self, extractor):
+        # “类型+剧”后接 情/场/照/本 时不判剧集（喜剧剧情片、美食剧场版等）
+        info = extractor.extract(
+            "《测试片》\n高分喜剧剧情片推荐\n英语中字\n见平👇",
+            "5335800000042",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.genre == "电影"
