@@ -267,8 +267,9 @@ class MovieInfo:
 
         if self.awards and not self.awards.startswith('改编自'):
             awards_clean = safe_filename(self.awards)
-            # 若奖项末尾与类型重复（如“洛迦诺电影节展映纪录片”+ genre“纪录片”），去掉末尾类型词
-            if self.genre and awards_clean.endswith(self.genre):
+            # 若奖项末尾与类型重复（如“洛迦诺电影节展映纪录片”+ genre“纪录片”），去掉末尾类型词；
+            # 泛型“电影”除外——“十佳独立电影”的“电影”是荣誉名一部分，保留（松林外）
+            if self.genre and self.genre != "电影" and awards_clean.endswith(self.genre):
                 awards_clean = awards_clean[:-len(self.genre)].rstrip()
                 genre_stripped_from_awards = True
             # 奖项文本中的半角“/”全角化（金球奖最佳限定剧/电视电影），

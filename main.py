@@ -317,12 +317,16 @@ class Lobster:
             year = parsed.get("year") or base_info.year
             file_douban_rating = parsed.get("douban_rating")
 
-            # 用解析出的中文名搜索豆瓣外文名和评分（年份用于歧义中文名筛选）
+            # 用解析出的中文名搜索豆瓣外文名和评分（年份用于歧义中文名筛选；
+            # 主演/导演名用于同名同年条目的人名甄别）
             foreign_name = None
             douban_rating_from_search = None
             if chinese_name:
+                hint_names = list(base_info.cast or [])
+                if base_info.director:
+                    hint_names.append(base_info.director)
                 foreign_name, douban_rating_from_search = search_movie(
-                    chinese_name, year
+                    chinese_name, year, hint_names
                 )
 
             douban_rating = file_douban_rating or douban_rating_from_search

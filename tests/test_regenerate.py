@@ -41,7 +41,13 @@ def build_filename(
     foreign_name = None
     douban_rating_from_search = None
     if chinese_name:
-        foreign_name, douban_rating_from_search = search_movie(chinese_name, year)
+        # 与 main.py 一致：主演/导演名用于豆瓣同名条目甄别
+        hint_names = list(info.cast or [])
+        if info.director:
+            hint_names.append(info.director)
+        foreign_name, douban_rating_from_search = search_movie(
+            chinese_name, year, hint_names
+        )
 
     if not foreign_name and not douban_rating_from_search:
         # 仅当豆瓣搜索完全失败（外文名、评分均未取到）时才回填保存的外文名；

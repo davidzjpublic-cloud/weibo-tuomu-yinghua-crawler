@@ -57,7 +57,7 @@ class TestSearchMovie:
 
     def test_search_returns_tuple(self, monkeypatch):
         monkeypatch.setattr(
-            douban, "_fetch_douban_search", lambda name, year=None: ("X", "8.0")
+            douban, "_fetch_douban_search", lambda name, year=None, hint_names=None: ("X", "8.0")
         )
         douban._cache.clear()
         result = search_movie("tuple_test")
@@ -68,7 +68,7 @@ class TestSearchMovie:
     def test_ignore_identical_chinese_name(self, monkeypatch):
         # 用 monkeypatch 模拟豆瓣返回与输入相同的中文名
         monkeypatch.setattr(
-            douban, "_fetch_douban_search", lambda name, year=None: (name, "9.7")
+            douban, "_fetch_douban_search", lambda name, year=None, hint_names=None: (name, "9.7")
         )
         douban._cache.clear()
         foreign_name, rating = search_movie("测试同名")
@@ -77,7 +77,7 @@ class TestSearchMovie:
 
     def test_keep_different_chinese_name(self, monkeypatch):
         monkeypatch.setattr(
-            douban, "_fetch_douban_search", lambda name, year=None: ("另一个中文名", "8.5")
+            douban, "_fetch_douban_search", lambda name, year=None, hint_names=None: ("另一个中文名", "8.5")
         )
         douban._cache.clear()
         foreign_name, rating = search_movie("测试名")
@@ -86,14 +86,14 @@ class TestSearchMovie:
 
     def test_search_movie_foreign_name(self, monkeypatch):
         monkeypatch.setattr(
-            douban, "_fetch_douban_search", lambda name, year=None: ("Test Name", "7.0")
+            douban, "_fetch_douban_search", lambda name, year=None, hint_names=None: ("Test Name", "7.0")
         )
         douban._cache.clear()
         assert search_movie_foreign_name("foreign_name_test") == "Test Name"
 
     def test_search_movie_rating(self, monkeypatch):
         monkeypatch.setattr(
-            douban, "_fetch_douban_search", lambda name, year=None: (None, "6.5")
+            douban, "_fetch_douban_search", lambda name, year=None, hint_names=None: (None, "6.5")
         )
         douban._cache.clear()
         assert search_movie_rating("rating_test") == "6.5"
@@ -101,7 +101,7 @@ class TestSearchMovie:
     def test_cache(self, monkeypatch):
         call_count = [0]
 
-        def mock_fetch(name, year=None):
+        def mock_fetch(name, year=None, hint_names=None):
             call_count[0] += 1
             return ("Mock", "5.0")
 
@@ -115,7 +115,7 @@ class TestSearchMovie:
         """失败的查询结果 (None, None) 不应被缓存。"""
         call_count = [0]
 
-        def mock_fetch(name, year=None):
+        def mock_fetch(name, year=None, hint_names=None):
             call_count[0] += 1
             return (None, None)
 
@@ -289,3 +289,50 @@ class TestEntryYearParsing:
         foreign, rating = _fetch_douban_search("水", 2005)
         assert foreign == "Water"
         assert rating == "8.4"
+
+
+class TestHintNameEntrySelection:
+    """同名条目的主演/导演名甄别（合唱团 The Choral 事件）。"""
+
+    def _entries(self):
+        # (标题, 评分, 年份, 条目ID, 块文本)
+        return [
+            ("陽光女子合唱團", "7.3", 2025, "37193250",
+             "阳光女子合唱团 7.3 原名:陽光女子合唱團 / 林孝谦 / 陈意涵 / 2025"),
+            ("The Choral", "6.7", 2025, "36828836",
+             "合唱团 6.7 原名:The Choral / 尼古拉斯·希特纳 / 拉尔夫·费因斯 / 2025"),
+        ]
+
+    def test_hint_prefers_cast_matching_entry(self):
+        from douban import _choose_entry
+        name, rating, sid = _choose_entry(
+            self._entries(), "合唱团", 2025, ["拉尔夫·费因斯"]
+        )
+        assert name == "The Choral"
+        assert rating == "6.7"
+        assert sid == "36828836"
+
+    def test_no_hint_keeps_relevance_order(self):
+        from douban import _choose_entry
+        name, rating, _ = _choose_entry(self._entries(), "合唱团", 2025)
+        assert name == "陽光女子合唱團"
+        assert rating == "7.3"
+
+    def test_hint_without_match_falls_back(self):
+        from douban import _choose_entry
+        name, _, _ = _choose_entry(
+            self._entries(), "合唱团", 2025, ["汤姆·汉克斯"]
+        )
+        assert name == "陽光女子合唱團"
+
+    def test_search_movie_threads_hints(self, monkeypatch):
+        captured = {}
+
+        def mock_fetch(name, year=None, hint_names=None):
+            captured["hint_names"] = hint_names
+            return ("Test Name", "7.0")
+
+        monkeypatch.setattr(douban, "_fetch_douban_search", mock_fetch)
+        douban._cache.clear()
+        _, _ = search_movie("hint_thread_test", 2025, ["某主演"])
+        assert captured["hint_names"] == ["某主演"]

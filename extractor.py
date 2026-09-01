@@ -468,6 +468,13 @@ class MovieExtractor:
             else:
                 info.awards = adaptation_text
 
+        # 奖项/改编片段之外的正文（评级、类别的独立用法在这里判断）
+        non_award_text = text
+        if info.awards:
+            for piece in info.awards.split(' '):
+                if piece:
+                    non_award_text = non_award_text.replace(piece, ' ')
+
         # 提取评级
         found_ratings = []
         for pattern in self.rating_patterns:
@@ -475,7 +482,14 @@ class MovieExtractor:
             if match:
                 rating_text = match.group(1)
                 if info.awards and rating_text in info.awards:
-                    continue
+                    # 奖项/改编文本已含同一评级词（如“高分原著”“热门高分原著”）时
+                    # 默认不重复显示（龙纹身的女孩；英国国王：“导演高分作品”）；
+                    # 但奖项之外的正文另有独立评级用法——“高分+类型词”而非
+                    # “高分作品”（异乡人：“主演高分传记片”）——时仍显示
+                    if not re.search(
+                        re.escape(rating_text) + r'(?!原著|作品)', non_award_text
+                    ):
+                        continue
                 if any(
                     rating_text in existing and rating_text != existing
                     for existing in found_ratings
@@ -687,14 +701,21 @@ class MovieExtractor:
             info.genre = "电影"
 
         # 类别词与获奖信息重复时不再作为类别显示（在类型判定后处理）：
-        # “最佳剧情片”“金马最佳剧情短片”中的“剧情”与显示形式“剧情片/剧情短片”重复 → 抑制；
+        # “最佳剧情片”“金马最佳剧情短片”的类别词只出现在奖项文本内 → 抑制（曼克等）；
         # “最佳动画长片”中的“动画”即类型词本身 → 抑制；
-        # 但“最佳剧情长片”中的“剧情”≠类型词，显示形式“剧情片”不在获奖中 → 保留
+        # “最佳剧情长片”中的“剧情”≠类型词，显示形式“剧情片”不在获奖中 → 保留（范保德）；
+        # 正文奖项以外另有该类别词（主演行“喜剧动作犯罪片”+奖项“最佳喜剧片”）
+        # → 保留（耐撕侦探）
         if info.category and info.awards:
             kept = []
             for c in info.category.split('/'):
-                if c in info.awards and (
-                    c + '长片' not in info.awards or c == info.genre
+                if (
+                    c in info.awards
+                    and (
+                        c + '长片' not in info.awards
+                        or (info.genre or '').startswith(c)
+                    )
+                    and c not in non_award_text
                 ):
                     continue
                 kept.append(c)

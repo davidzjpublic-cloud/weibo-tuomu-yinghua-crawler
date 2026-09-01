@@ -1760,3 +1760,102 @@ class TestMovieExtractor:
         )
         assert info is not None
         assert info.genre == "电影"
+
+    def test_family_genre_category(self, extractor):
+        # 回归：全家变身大作战“主演喜剧家庭片”——“家庭”入类别表（09-02 基准）
+        info = extractor.extract(
+            "《全家变身大作战》\n詹妮弗·加纳/艾玛·迈尔斯主演喜剧家庭片\n英语中英双字\n见平👇",
+            "5335800000051",
+            "2026-09-01",
+        )
+        assert info is not None
+        assert info.category == "喜剧/家庭"
+        filename = info.generate_filename()
+        assert "喜剧家庭片" in filename
+
+    def test_rotterdam_audience_award(self, extractor):
+        # 回归：罪人“鹿特丹电影节观众奖获奖作品”（09-02 基准）
+        info = extractor.extract(
+            "《罪人》\n鹿特丹电影节观众奖获奖作品\n热门惊悚犯罪电影推荐\n丹麦语中字\n见平👇",
+            "5335800000052",
+            "2026-09-01",
+        )
+        assert info is not None
+        assert info.awards == "鹿特丹电影节观众奖获奖作品"
+
+    def test_nbr_top10_indie_films_kept_whole(self, extractor):
+        # 回归：松林外“美国国家评论协会奖十佳独立电影”——
+        # “电影”是荣誉名一部分，不被泛型剥离（09-02 基准）
+        info = extractor.extract(
+            "《松林外》\n瑞恩·高斯林/布莱德利·库珀主演犯罪电影\n美国国家评论协会奖十佳独立电影\n英语中英双字\n见平👇",
+            "5335800000053",
+            "2026-09-01",
+        )
+        assert info is not None
+        assert info.awards == "美国国家评论协会奖十佳独立电影"
+        filename = info.generate_filename()
+        assert "美国国家评论协会奖十佳独立电影 犯罪片" in filename
+
+    def test_critics_choice_award_keeps_cast_category(self, extractor):
+        # 回归：耐撕侦探“最佳喜剧片”与主演行“喜剧动作犯罪片”并存——
+        # 奖项外的类别词保留，各表各的（09-02 基准）
+        info = extractor.extract(
+            "《耐撕侦探》\n罗素·克劳/瑞恩·高斯林主演喜剧动作犯罪片\n美国评论家选择奖最佳喜剧片提名作品\n英语中英双字\n见平👇",
+            "5335800000054",
+            "2026-09-01",
+        )
+        assert info is not None
+        assert info.awards == "美国评论家选择奖最佳喜剧片提名作品"
+        assert info.category == "喜剧/犯罪/动作"
+        filename = info.generate_filename()
+        assert "美国评论家选择奖最佳喜剧片提名作品 喜剧犯罪动作片" in filename
+
+    def test_rating_shown_with_category_word_despite_adaptation(self, extractor):
+        # 回归：异乡人“改编自…高分原著”+“主演高分传记片”——
+        # 奖项内已有“高分”时，“高分+类型词”的独立用法仍显示评级（09-02 基准）
+        info = extractor.extract(
+            "《异乡人:上海的芥川龙之介》\n改编自芥川龙之介高分原著《上海游记》\n松田龙平主演高分传记片\n日语中日双字\n见平👇",
+            "5335800000055",
+            "2026-09-01",
+        )
+        assert info is not None
+        assert info.rating == "高分"
+        filename = info.generate_filename()
+        assert "松田龙平主演 高分传记片" in filename
+
+    def test_rating_hidden_when_only_gaofen_works(self, extractor):
+        # 回归：我曾侍候过英国国王“导演高分作品”——奖项含“高分原著”时，
+        # “高分作品”不是独立评级用法，不显示（09-01 基准维持）
+        info = extractor.extract(
+            "《我曾侍候过英国国王》\n改编自博胡米尔·赫拉巴尔同名高分原著\n柏林电影节金熊奖提名作品\n伊日·门泽尔导演高分作品\n多语中字\n见平👇",
+            "5335800000056",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.rating is None
+        filename = info.generate_filename()
+        assert "伊日·门泽尔导演 多语中字" in filename
+
+    def test_rating_gaofen_works_shown_without_adaptation(self, extractor):
+        # 回归对照：喜宴“李安导演高分作品”无改编文本时评级正常显示
+        info = extractor.extract(
+            "《喜宴》\n李安导演高分作品\n国语中字\n见平👇",
+            "5335800000057",
+            "2026-08-31",
+        )
+        assert info is not None
+        assert info.rating == "高分"
+
+    def test_rating_hidden_for_compound_word_in_adaptation(self, extractor):
+        # 回归：龙纹身的女孩“改编自同名热门高分原著”——复合评级词
+        # “热门高分”及其子词都属奖项文本，不作为评级（09-02 基准维持）
+        info = extractor.extract(
+            "《龙纹身的女孩》\n改编自同名热门高分原著\n鲁妮·玛拉/丹尼尔·克雷格主演\n大卫·芬奇导演作品\n悬疑惊悚电影\n英语中字\n见平👇",
+            "5335800000058",
+            "2026-08-27",
+        )
+        assert info is not None
+        assert info.rating is None
+        filename = info.generate_filename()
+        assert "悬疑惊悚片" in filename
+        assert "热门悬疑惊悚片" not in filename

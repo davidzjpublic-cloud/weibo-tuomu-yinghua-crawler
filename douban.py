@@ -195,23 +195,27 @@ def _fetch_latin_aka(sid: str) -> Optional[str]:
 
 
 def _choose_entry(
-    entries: List[Tuple[str, Optional[str], Optional[int], Optional[str]]],
+    entries: List[Tuple[str, Optional[str], Optional[int], Optional[str], str]],
     chinese_name: str,
     year: Optional[int] = None,
+    hint_names: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """从 (标题, 评分, 年份, 条目ID) 候选条目中选择最合适的一个，返回 (外文名, 评分, 条目ID)。
+    """从 (标题, 评分, 年份, 条目ID, 块文本) 候选条目中选择最合适的一个，返回 (外文名, 评分, 条目ID)。
 
     规则：
     1. 去掉与中文名完全相同的候选（那只是中文名本身，不是外文名）。
     2. 已知年份时，优先在年份匹配的条目中选择。
-    3. 取相关性排名最靠前的候选——豆瓣搜索排序即为相关性，
+    3. 提供了主演/导演名时，优先选条目摘要里含这些人名的候选——
+       豆瓣按相关性排序可能把同年同名的另一部片排在前
+       （“合唱团”：陈意涵《阳光女子合唱团》排在拉尔夫·费因斯 The Choral 前）。
+    4. 取相关性排名最靠前的候选——豆瓣搜索排序即为相关性，
        韩文/日文标题同样是合法外文名，不再按拉丁字母占比跳过。
-    4. 清理日文名中常见的“・第X部・...”后缀。
+    5. 清理日文名中常见的“・第X部・...”后缀。
     """
     if not entries:
         return None, None, None
 
-    filtered = [i for i, (t, _, _, _) in enumerate(entries) if t != chinese_name]
+    filtered = [i for i, (t, _, _, _, _) in enumerate(entries) if t != chinese_name]
     if not filtered:
         filtered = list(range(len(entries)))
 
@@ -219,6 +223,15 @@ def _choose_entry(
         year_hits = [i for i in filtered if entries[i][2] == year]
         if year_hits:
             filtered = year_hits
+
+    hints = [h.strip() for h in (hint_names or []) if h and h.strip()]
+    if hints:
+        hint_hits = [
+            i for i in filtered
+            if any(h in entries[i][4] for h in hints)
+        ]
+        if hint_hits:
+            filtered = hint_hits
 
     def clean(n: str) -> str:
         # 截断“・第X部・...”这类日文系列后缀
@@ -234,9 +247,12 @@ def _choose_entry(
 
 
 def _fetch_douban_search(
-    chinese_name: str, year: Optional[int] = None
+    chinese_name: str,
+    year: Optional[int] = None,
+    hint_names: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """请求豆瓣搜索并解析外文名与评分。year 用于歧义中文名的条目筛选。"""
+    """请求豆瓣搜索并解析外文名与评分。year 用于歧义中文名的条目筛选，
+    hint_names（主演/导演名）用于同名条目的人名甄别。"""
     if not chinese_name:
         return None, None
 
@@ -280,9 +296,9 @@ def _fetch_douban_search(
 
         text = response.text
 
-        # 按搜索结果块配对解析（标题 + 该条目自己的评分 + 条目年份 + 条目ID），
+        # 按搜索结果块配对解析（标题 + 该条目自己的评分 + 条目年份 + 条目ID + 块文本），
         # 避免外文名取自候选 A 而评分取自页面第一个结果
-        entries: List[Tuple[str, Optional[str], Optional[int], Optional[str]]] = []
+        entries: List[Tuple[str, Optional[str], Optional[int], Optional[str], str]] = []
         for block in re.split(r'<div[^>]*class="[^"]*result[^"]*"', text)[1:]:
             title_match = re.search(
                 r'<a[^>]*class="nbg"[^>]*title="([^"]+)"', block,
@@ -320,6 +336,7 @@ def _fetch_douban_search(
                     rating_match.group(1) if rating_match else None,
                     int(year_match.group(0)) if year_match else None,
                     sid_match.group(1) if sid_match else None,
+                    plain_block,
                 )
             )
 
@@ -327,7 +344,9 @@ def _fetch_douban_search(
             logger.warning(f"豆瓣搜索无结果条目: {chinese_name}")
             return None, None
 
-        foreign_name, rating, sid = _choose_entry(entries, chinese_name, year)
+        foreign_name, rating, sid = _choose_entry(
+            entries, chinese_name, year, hint_names
+        )
         # 小语种文字标题（格鲁吉亚文、缅甸文等）改用“又名”中的拉丁字母标题；
         # 中/日/韩/泰/俄等大语种保留原文
         if foreign_name and _is_minor_script(foreign_name):
@@ -359,9 +378,12 @@ def _drop_embedded_name(
 
 
 def search_movie(
-    chinese_name: str, year: Optional[int] = None
+    chinese_name: str,
+    year: Optional[int] = None,
+    hint_names: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """搜索豆瓣，返回 (外文名, 评分)。year 用于歧义中文名的条目筛选。
+    """搜索豆瓣，返回 (外文名, 评分)。year 用于歧义中文名的条目筛选，
+    hint_names（主演/导演名）用于同名条目的人名甄别。
 
     若外文名为中文且与输入完全一致，则外文名返回 None。
     """
@@ -369,6 +391,9 @@ def search_movie(
         return None, None
 
     key = chinese_name.strip()
+    hints = [h.strip() for h in (hint_names or []) if h and h.strip()]
+    # 缓存照常读取（带 hints 的结果会回写缓存，供后续无 hints 调用复用）；
+    # 历史上按旧规则误选的条目靠 TTL 过期后重查升级
     cached = _get_from_cache(key)
     if cached is not None:
         # 旧缓存里可能存着小语种文字标题（拉丁优先规则生效前写入），
@@ -376,7 +401,7 @@ def search_movie(
         if not _is_minor_script(cached[0] or ""):
             return _drop_embedded_name(key, cached[0]), cached[1]
 
-    foreign_name, rating = _fetch_douban_search(key, year)
+    foreign_name, rating = _fetch_douban_search(key, year, hints)
 
     if foreign_name:
         # 忽略与原名完全一致的中文名
