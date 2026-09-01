@@ -1859,3 +1859,150 @@ class TestMovieExtractor:
         filename = info.generate_filename()
         assert "悬疑惊悚片" in filename
         assert "热门悬疑惊悚片" not in filename
+
+
+class TestExpandedAwardsPatterns:
+    """2026-09 穷举补齐的奖项模式抽查（欧洲/北美/类型节/亚洲/华语）。"""
+
+    @staticmethod
+    def _extract(text):
+        return MovieExtractor().extract(text)
+
+    def test_annie_award_independent_animated_feature(self):
+        # 百日红：安妮奖是此前实据盲区
+        info = self._extract("《百日红》 安妮奖最佳独立动画长片提名作品 日语中字")
+        assert info.awards == "安妮奖最佳独立动画长片提名作品"
+
+    def test_bafta_best_picture(self):
+        # 芝加哥七君子审判：英国电影学院奖最佳影片
+        info = self._extract("《芝加哥七君子审判》 英国电影学院奖最佳影片提名作品 英语中英双字")
+        assert info.awards == "英国电影学院奖最佳影片提名作品"
+
+    def test_venice_san_marco_award(self):
+        info = self._extract("《柠檬伏特加》 威尼斯电影节圣马可奖获奖作品 亚美尼亚语中字")
+        assert info.awards == "威尼斯电影节圣马可奖获奖作品"
+
+    def test_golden_horse_multi_nomination(self):
+        info = self._extract("《窄路微尘》 金马多项奖项提名作品 粤语中字")
+        assert info.awards == "金马多项奖项提名作品"
+
+    def test_sitges_best_film(self):
+        info = self._extract("《谜巢》 锡切斯国际奇幻电影节最佳影片获奖作品 英语中字")
+        assert info.awards == "锡切斯国际奇幻电影节最佳影片获奖作品"
+
+    def test_annecy_feature_crystal(self):
+        info = self._extract("《机器人之梦》 安纳西国际动画节长片水晶奖提名 西班牙语中字")
+        assert info.awards == "安纳西国际动画节长片水晶奖提名"
+
+    def test_toronto_people_choice(self):
+        info = self._extract("《天堂边缘》 多伦多电影节人民选择奖获奖作品 德语中字")
+        assert info.awards == "多伦多电影节人民选择奖获奖作品"
+
+    def test_sag_ensemble(self):
+        info = self._extract("《儿子》 美国演员工会奖最佳群像提名作品 英语中字")
+        assert info.awards == "美国演员工会奖最佳群像提名作品"
+
+    def test_independent_spirit_best_picture(self):
+        info = self._extract("《无依之地》 独立精神奖最佳影片提名作品 英语中字")
+        assert info.awards == "独立精神奖最佳影片提名作品"
+
+    def test_david_di_donatello(self):
+        info = self._extract("《完美陌生人》 意大利大卫奖最佳影片获奖作品 意大利语中字")
+        assert info.awards == "意大利大卫奖最佳影片获奖作品"
+
+    def test_tokyo_grand_prix(self):
+        # 东京大奖/樱花大奖/金麒麟奖三名同指东京国际电影节最高奖
+        info = self._extract("《雪》 东京国际电影节金麒麟奖获奖作品 日语中字")
+        assert info.awards == "东京国际电影节金麒麟奖获奖作品"
+
+    def test_udine_far_east_black_dragon(self):
+        info = self._extract("《九龙城寨》 乌甸尼远东电影节黑龙奖获奖作品 粤语中字")
+        assert info.awards == "乌甸尼远东电影节黑龙奖获奖作品"
+
+    def test_shanghai_golden_goblet(self):
+        info = self._extract("《久别重逢》 金爵奖最佳影片获奖作品 国语中字")
+        assert info.awards == "金爵奖最佳影片获奖作品"
+
+    def test_hk_film_critics_society(self):
+        info = self._extract("《智齿》 香港电影评论学会大奖最佳电影获奖作品 粤语中字")
+        assert info.awards == "香港电影评论学会大奖最佳电影获奖作品"
+
+    def test_baeksang_film_grand_prize(self):
+        info = self._extract("《分手的决心》 百想艺术大赏电影部门大赏获奖作品 韩语中字")
+        assert info.awards == "百想艺术大赏电影部门大赏获奖作品"
+
+    def test_idfa_grand_prix_with_double_jiang(self):
+        # “最佳长纪录片大奖获奖”需完整去掉“大奖”，不能只剩半个“大”
+        info = self._extract("《缅甸黄花》 阿姆斯特丹国际纪录片节最佳长纪录片大奖获奖作品 荷兰语中字")
+        assert info.awards == "阿姆斯特丹国际纪录片节最佳长纪录片获奖作品"
+
+    def test_singapore_silver_screen(self):
+        info = self._extract("《白衣苍狗》 新加坡国际电影节银屏奖获奖作品 国语中字")
+        assert info.awards == "新加坡国际电影节银屏奖获奖作品"
+
+    def test_daejong_best_picture(self):
+        info = self._extract("《密阳》 大钟奖最佳影片获奖作品 韩语中字")
+        assert info.awards == "大钟奖最佳影片获奖作品"
+
+    def test_nikkan_sports_grand_prize(self):
+        info = self._extract("《四月物语》 日刊体育电影大奖 日语中字")
+        assert info.awards == "日刊体育电影大奖"
+
+    def test_awards_do_not_leak_category_words(self):
+        # 新增类型节模式不得让类别词混入奖项（锡切斯→奇幻、安纳西→动画）
+        info = self._extract("《谜巢》 锡切斯国际奇幻电影节最佳影片获奖作品 英语中字")
+        assert info.category is None or "奇幻" not in (info.category or "")
+
+
+class TestExpandedLanguageNames:
+    """2026-09 穷举补齐的语言名（无斜杠连写形式）。"""
+
+    @staticmethod
+    def _extract(text):
+        return MovieExtractor().extract(text)
+
+    def test_plain_urdu(self):
+        # 实据：英/乌尔都语 斜杠写法已通，无斜杠连写为盲区
+        info = self._extract("《大地之子》 乌尔都语中字 见平👇")
+        assert info.language == "乌尔都语"
+        assert info.subtitle == "中字"
+
+    def test_plain_latin(self):
+        info = self._extract("《十日谈》 拉丁语中英双字 见平👇")
+        assert info.language == "拉丁语"
+        assert info.subtitle == "中英双字"
+
+    def test_tibetan_mongolian_uighur(self):
+        info = self._extract("《静静的嘛呢石》 藏语中字 见平👇")
+        assert info.language == "藏语"
+        info = self._extract("《告别》 蒙古语中字 见平👇")
+        assert info.language == "蒙古语"
+        info = self._extract("《第一次的离别》 维吾尔语中字 见平👇")
+        assert info.language == "维吾尔语"
+
+    def test_sign_language_combo(self):
+        # 手语+英语连写组合，长单元优先
+        info = self._extract("《健听女孩》 手语英语中英双字 见平👇")
+        assert info.language == "手语英语"
+
+    def test_seediq(self):
+        info = self._extract("《赛德克·巴莱》 赛德克语中字 见平👇")
+        assert info.language == "赛德克语"
+
+    def test_slash_combo_with_new_language(self):
+        # 斜杠组合里的新语言（宽松解析路径）
+        info = self._extract("《关塔那摩之路》 英/乌尔都语中字 见平👇")
+        assert info.language == "英乌尔都语"
+
+    def test_lemon_vodka_full_run(self):
+        # 实据：亚美尼亚/库尔德/俄语 → 亚美尼亚库尔德俄语（旧代码误提取“德俄语”）
+        info = self._extract("《柠檬伏特加》 威尼斯电影节圣马可奖获奖作品 亚美尼亚/库尔德/俄语中英双字 见平👇")
+        assert info.language == "亚美尼亚库尔德俄语"
+        assert info.subtitle == "中英双字"
+
+    def test_existing_language_unaffected(self):
+        # 原有语言与组合不受扩表影响
+        info = self._extract("《便利店》 乌兹别克俄语中英双字 见平👇")
+        assert info.language == "乌兹别克俄语"
+        info = self._extract("《不良教育》 西/拉丁语中字 见平👇")
+        assert info.language == "西拉丁语"
