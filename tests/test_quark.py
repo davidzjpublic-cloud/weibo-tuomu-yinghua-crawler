@@ -455,3 +455,14 @@ class TestQuarkClient:
         ok = quark_client.rename_file("fid123", "男人 Men 2022 （恐怖片）")
         assert ok is True
         assert captured.get("file_name") == "男人 Men 2022 （恐怖片）"
+
+    def test_extract_obfuscated_quark_link(self):
+        # 回归：月色撩人——评论里的链接被博主插入中文干扰字防审查
+        text = "htt删ps://pan.quar掉k.cn/s/5410a字4d124c4"
+        links = extract_quark_links(text)
+        assert links == ["https://pan.quark.cn/s/5410a4d124c4"]
+
+    def test_find_obfuscated_link_in_comment_text(self):
+        comments = [{"text": "htt删ps://pan.quar掉k.cn/s/5410a字4d124c4"}]
+        link = find_quark_link_in_comments(comments, lambda x: None)
+        assert link == "https://pan.quark.cn/s/5410a4d124c4"

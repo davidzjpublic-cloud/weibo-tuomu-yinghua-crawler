@@ -290,7 +290,28 @@ class WeiboCrawler:
         return list(dict.fromkeys(urls))
 
     def get_comments(self, weibo_id: str, max_pages: int = DEFAULT_COMMENT_MAX_PAGES) -> List[Dict]:
-        """获取评论（PC 端 API），支持分页。"""
+        """获取评论（PC 端 API）：时间流 flow=0 为主，无夸克链接时回退热门流 flow=1。
+
+        部分微博的链接评论只出现在热门流（月色撩人：正文与时间流均无链接，
+        作者把插了防审查干扰字的夸克链接回复在了热门流里）。
+        """
+        all_comments = self._fetch_comments_flow(weibo_id, max_pages, flow=0)
+        if any(c.get("_quark_link") for c in all_comments):
+            return all_comments
+
+        hot_comments = self._fetch_comments_flow(weibo_id, max_pages, flow=1)
+        seen = {str(c.get("id") or c.get("mid") or "") for c in all_comments}
+        for c in hot_comments:
+            key = str(c.get("id") or c.get("mid") or "")
+            if key and key not in seen:
+                all_comments.append(c)
+                seen.add(key)
+        return all_comments
+
+    def _fetch_comments_flow(
+        self, weibo_id: str, max_pages: int, flow: int
+    ) -> List[Dict]:
+        """按指定流（0=时间流 1=热门流）拉取评论，支持分页。"""
         all_comments: List[Dict] = []
         max_id = 0
         max_id_type = 0
@@ -298,7 +319,7 @@ class WeiboCrawler:
         for page in range(max_pages):
             url = API_BUILD_COMMENTS
             params: Dict[str, object] = {
-                "flow": 0,
+                "flow": flow,
                 "is_reload": 1,
                 "id": weibo_id,
                 "is_show_bulletin": 2,

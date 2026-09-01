@@ -39,10 +39,19 @@ def is_quark_link(url: Optional[str]) -> bool:
     return bool(url) and "quark" in url and "pan.quark.cn" in url
 
 
+def _strip_link_obfuscation(text: str) -> str:
+    """剔除链接中的中文干扰字（博主防审查手法，URL 本身不含中文）。
+
+    如“htt删ps://pan.quar掉k.cn/s/5410a字4d124c4”→“https://pan.quark.cn/s/5410a4d124c4”。
+    """
+    return re.sub(r'[一-鿿]', '', text)
+
+
 def extract_quark_links(text: str) -> List[str]:
     """从文本中提取夸克网盘链接（不展开短链）。"""
     if not text:
         return []
+    text = _strip_link_obfuscation(text)
 
     links = []
 
@@ -69,6 +78,7 @@ def extract_quark_links_with_expansion(
     expander: Callable[[str], Optional[str]],
 ) -> List[str]:
     """从文本中提取夸克网盘链接，包含 t.cn 短链展开。"""
+    text = _strip_link_obfuscation(text)
     links = extract_quark_links(text)
 
     # 4. t.cn 短链展开
