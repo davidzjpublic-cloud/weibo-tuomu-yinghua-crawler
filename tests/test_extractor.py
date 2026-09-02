@@ -1825,7 +1825,8 @@ class TestMovieExtractor:
 
     def test_rating_hidden_when_only_gaofen_works(self, extractor):
         # 回归：我曾侍候过英国国王“导演高分作品”——奖项含“高分原著”时，
-        # “高分作品”不是独立评级用法，不显示（09-01 基准维持）
+        # “高分作品”不是独立评级用法，不显示；
+        # 顺序按 09-03_0 基准（斯万的爱情）：改编自前置、角色其后、其余奖项最后
         info = extractor.extract(
             "《我曾侍候过英国国王》\n改编自博胡米尔·赫拉巴尔同名高分原著\n柏林电影节金熊奖提名作品\n伊日·门泽尔导演高分作品\n多语中字\n见平👇",
             "5335800000056",
@@ -1834,7 +1835,7 @@ class TestMovieExtractor:
         assert info is not None
         assert info.rating is None
         filename = info.generate_filename()
-        assert "伊日·门泽尔导演 多语中字" in filename
+        assert "伊日·门泽尔导演 柏林电影节金熊奖提名作品 多语中字" in filename
 
     def test_rating_gaofen_works_shown_without_adaptation(self, extractor):
         # 回归对照：喜宴“李安导演高分作品”无改编文本时评级正常显示
@@ -2006,3 +2007,94 @@ class TestExpandedLanguageNames:
         assert info.language == "乌兹别克俄语"
         info = self._extract("《不良教育》 西/拉丁语中字 见平👇")
         assert info.language == "西拉丁语"
+
+
+
+class TestBatch0902Alignment:
+    """2026-09-02 批次对齐：折行主演合并、前4人截断、奖项细分、科幻动画短片。"""
+
+    @staticmethod
+    def _extract(text):
+        return MovieExtractor().extract(text)
+
+    def test_folded_cast_line_merged_with_next(self):
+        # 新风貌：折行名单以“/”结尾且行内无角色词，与下一行合并后完整提取
+        info = self._extract("《新风貌》\n本·门德尔森/朱丽叶·比诺什/约翰·马尔科维奇/\n麦茜·威廉姆斯主演\n高分传记历史剧集推荐\n全10集 英语中英双字\n见平👇")
+        assert info.cast == ["本·门德尔森", "朱丽叶·比诺什", "约翰·马尔科维奇", "麦茜·威廉姆斯"]
+
+    def test_folded_cast_three_lines_capped_at_four(self):
+        # 神弃之地：三行折行共 7 人，文件名只取前 4 人
+        info = self._extract("《神弃之地》\n汤姆·霍兰德/罗伯特·帕丁森/比尔·斯卡斯加德/\n海莉·贝内特/丽莉·吉欧/塞巴斯蒂安·斯坦/\n米娅·华希科沃斯卡主演惊悚犯罪电影\n英语中英双字\n见平👇")
+        assert info.cast[:4] == ["汤姆·霍兰德", "罗伯特·帕丁森", "比尔·斯卡斯加德", "海莉·贝内特"]
+        filename = info.generate_filename()
+        assert "汤姆·霍兰德、罗伯特·帕丁森、比尔·斯卡斯加德、海莉·贝内特主演" in filename
+        assert "丽莉·吉欧" not in filename
+
+    def test_space_around_slash_in_cast(self):
+        # 特朗勃：分隔符两侧带空格（“路易·C·K / 艾丽·范宁”）不断链
+        info = self._extract("《特朗勃》\n布莱恩·克兰斯顿/戴安·琳恩/海伦·米伦/路易·C·K / 艾丽·范宁主演电影\n奥斯卡金像奖最佳男主角提名作品\n英语中英双字\n见平👇")
+        assert info.cast == ["布莱恩·克兰斯顿", "戴安·琳恩", "海伦·米伦", "路易·C·K", "艾丽·范宁"]
+        filename = info.generate_filename()
+        assert "布莱恩·克兰斯顿、戴安·琳恩、海伦·米伦、路易·C·K主演" in filename
+
+    def test_cast_order_follows_text(self):
+        # 无主之作：主演顺序照抄原文，不再因空格断链而乱序
+        info = self._extract("《无主之作》\n汤姆·希林 / 塞巴斯蒂安·科赫 / 葆拉·贝尔主演电影\n德/俄语中字\n见平👇")
+        assert info.cast == ["汤姆·希林", "塞巴斯蒂安·科赫", "葆拉·贝尔"]
+
+    def test_person_line_merge_not_triggered_by_language_line(self):
+        # 语言行（“法/英/德语中字”）不被当作人名行合并
+        info = self._extract("《斯万的爱情》\n杰瑞米·艾恩斯/奥内拉·穆蒂主演电影\n法/英/德语中字\n见平👇")
+        assert info.language == "法英德语"
+        assert info.cast == ["杰瑞米·艾恩斯", "奥内拉·穆蒂"]
+
+    def test_bafta_non_english_film(self):
+        info = self._extract("《斯万的爱情》\n英国电影学院奖最佳非英语片提名作品\n杰瑞米·艾恩斯/奥内拉·穆蒂主演电影\n法/英/德语中字\n见平👇")
+        assert "英国电影学院奖最佳非英语片提名作品" in info.awards
+
+    def test_adaptation_with_other_award_split_order(self):
+        # 斯万的爱情：改编自前置到主演之前，其余奖项仍排在角色之后
+        info = self._extract("《斯万的爱情》\n英国电影学院奖最佳非英语片提名作品\n杰瑞米·艾恩斯/奥内拉·穆蒂主演电影\n改编自高分原著《追忆似水年华》\n法/英/德语中字\n见平👇")
+        filename = info.generate_filename()
+        assert filename == (
+            "斯万的爱情 （改编自高分原著《追忆似水年华》 "
+            "杰瑞米·艾恩斯、奥内拉·穆蒂主演 "
+            "英国电影学院奖最佳非英语片提名作品 法英德语中字）"
+        )
+
+    def test_venice_cineuropa_award(self):
+        # 杀死汝爱：威尼斯日“欧洲联盟奖日最佳影片”
+        info = self._extract("《杀死汝爱》\n威尼斯电影节欧洲联盟奖日最佳影片提名作品\n丹尼尔·雷德克里夫/戴恩·德哈恩主演电影\n英语中英双字\n见平👇")
+        assert info.awards == "威尼斯电影节欧洲联盟奖日最佳影片提名作品"
+
+    def test_sundance_unit_grand_jury(self):
+        # 错误教育：圣丹斯美国电影单元评审团大奖
+        info = self._extract("《错误教育》\n圣丹斯电影节美国电影单元评审团大奖获奖作品\n科洛·葛蕾丝·莫瑞兹主演电影\n英语中英双字\n见平👇")
+        assert info.awards == "圣丹斯电影节美国电影单元评审团大奖获奖作品"
+        # 单元名可省略
+        info = self._extract("《X》\n圣丹斯电影节评审团大奖获奖作品\n见平👇")
+        assert info.awards == "圣丹斯电影节评审团大奖获奖作品"
+
+    def test_david_sub_award(self):
+        # 玫瑰岛：大卫奖细分奖项完整提取
+        info = self._extract("《玫瑰岛的不可思议的历史》\n意大利大卫奖最佳视觉效果获奖作品\n热门高分喜剧电影推荐\n意大利语中意双字\n见平👇")
+        assert info.awards == "意大利大卫奖最佳视觉效果获奖作品"
+        # 无细分时仍为裸奖项
+        info = self._extract("《X》\n意大利大卫奖\n见平👇")
+        assert info.awards == "意大利大卫奖"
+
+    def test_scifi_animation_short_category(self):
+        # 乐高星球大战：科幻动画短片整体显示，不丢“动画”
+        info = self._extract("《乐高星球大战：曼达洛人》\n最新科幻动画短片推荐\n已出英语中英双字\n见平👇")
+        assert info.category == "科幻/动画/短片"
+        filename = info.generate_filename()
+        assert "科幻动画短片" in filename
+        assert "科幻短片" not in filename
+
+    def test_shorts_award_still_suppresses_category_dup(self):
+        # 奖项已含“短片”时维持旧行为：类别中的“短片”不重复显示
+        info = self._extract("《X》\n棕榈泉短片节最佳短片提名作品\n高分科幻短片推荐\n英语中字\n见平👇")
+        assert "短片" in info.awards
+        filename = info.generate_filename()
+        assert "高分科幻" in filename
+        assert "科幻短片" not in filename

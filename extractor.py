@@ -84,6 +84,52 @@ class MovieExtractor:
                 return None
         return ''.join(resolved)
 
+    # 多人名单行内不应出现的词：角色词、奖项词、类型词、语言字幕词等
+    _PERSON_LINE_BLOCK_KEYWORDS = (
+        '主演', '出演', '导演', '执导', '编剧', '监制', '制片', '出品', '改编',
+        '自导', '自演', '自编', '作品', '获奖', '提名', '入围', '展映', '奖',
+        '电影', '剧集', '纪录', '动画', '短片', '语', '字', '幕', '集', '季',
+        '《', '》', '推荐', '最新', '已出', '见平', '版', '高清',
+    )
+
+    def _merge_unlabeled_person_lines(self, text: str) -> str:
+        """把折行的多人名单与下一行合并。
+
+        微博把长主演名单折成多行，行尾以“/”结尾且行内无“主演/导演”等
+        角色词（如“本·门德尔森/朱丽叶·比诺什/约翰·马尔科维奇/”接下一行
+        “麦茜·威廉姆斯主演”），逐行匹配会漏掉折行前的人名，
+        故先按“一行多人未标注角色则并入下一行”合并。
+        """
+        if '\n' not in text:
+            return text
+        lines = text.split('\n')
+        merged: List[str] = []
+        i = 0
+        while i < len(lines):
+            cur = lines[i]
+            while self._is_unlabeled_person_line(cur) and i + 1 < len(lines):
+                i += 1
+                cur = cur.rstrip() + lines[i].lstrip()
+            merged.append(cur)
+            i += 1
+        return '\n'.join(merged)
+
+    def _is_unlabeled_person_line(self, line: str) -> bool:
+        """判断一行是否为无角色词的多人人名行（须以分隔符结尾）。"""
+        stripped = line.strip()
+        if not stripped or not re.search(r'[/、，,]\s*$', stripped):
+            return False
+        if any(kw in stripped for kw in self._PERSON_LINE_BLOCK_KEYWORDS):
+            return False
+        body = re.sub(r'[/、，,\s]+$', '', stripped)
+        segs = [s.strip() for s in re.split(r'[/、，,]', body)]
+        if len(segs) < 2:
+            return False
+        return all(
+            re.fullmatch(r'[一-龥A-Za-z0-9·．.\-]{2,15}', s)
+            for s in segs
+        )
+
     def is_non_movie_content(self, text: str) -> bool:
         """判断文本是否不属于影视资源内容。"""
         if not text:
@@ -219,6 +265,9 @@ class MovieExtractor:
         if not text:
             return info
 
+        # 折行的多人名单（行内无“主演/导演”等角色词）与下一行合并后再提取
+        text = self._merge_unlabeled_person_lines(text)
+
         # 提取中文名和外文名
         info.chinese_name, info.foreign_name = self.extract_name_pair(text)
 
@@ -302,7 +351,8 @@ class MovieExtractor:
         cast_candidates = []
 
         for m in re.finditer(
-            r'([^《》\n\s]{2,15}(?:[/、，,][^《》\n\s]{2,15})*)\s*(?:主演|出演)',
+            # 分隔符两侧允许空格（“路易·C·K / 艾丽·范宁主演”）
+            r'([^《》\n\s]{2,15}(?:\s*[/、，,]\s*[^《》\n\s]{2,15})*)\s*(?:主演|出演)',
             text,
         ):
             cast_candidates.append(m.group(1).strip())
@@ -379,6 +429,15 @@ class MovieExtractor:
                     continue
                 found_categories.append(cat)
         if found_categories:
+            # “科幻动画短片”中“动画”不在 GENRES 里（genre 分支处理），
+            # 类别提取时把“动画”插到“短片”前，避免显示时丢词
+            # （此处 genre 尚未判定，不能以 genre==“短片”为条件）
+            if (
+                "短片" in found_categories
+                and "动画" in text_after_title
+                and "动画" not in found_categories
+            ):
+                found_categories.insert(found_categories.index("短片"), "动画")
             info.category = '/'.join(found_categories)
 
         # 提取“X相关”描述（如“哈利·波特相关高分纪录片”中的“哈利·波特相关”），

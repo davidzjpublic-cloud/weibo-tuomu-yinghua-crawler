@@ -254,9 +254,17 @@ class MovieInfo:
         # 奖项末尾的类型词是否已剥离（剥离后 genre 改为独立显示）
         genre_stripped_from_awards = False
 
-        # 改编自类信息放在导演/主演之前
+        # 改编自类信息放在导演/主演之前；
+        # awards 同时含“改编自”与其他奖项时（斯万的爱情）拆开：
+        # “改编自”前置，其余奖项仍按奖项位置排在角色之后
+        adaptation_part = None
+        awards_rest = self.awards
         if self.awards and self.awards.startswith('改编自'):
-            bracket_parts.append(safe_filename(self.awards))
+            award_split = self.awards.split(' ', 1)
+            adaptation_part = award_split[0]
+            awards_rest = award_split[1] if len(award_split) > 1 else None
+        if adaptation_part:
+            bracket_parts.append(safe_filename(adaptation_part))
 
         ordered_parts = self._build_role_parts()
         bracket_parts.extend([p[1] for p in ordered_parts])
@@ -265,8 +273,8 @@ class MovieInfo:
         if self.work_credit:
             bracket_parts.append(safe_filename(self.work_credit))
 
-        if self.awards and not self.awards.startswith('改编自'):
-            awards_clean = safe_filename(self.awards)
+        if awards_rest:
+            awards_clean = safe_filename(awards_rest)
             # 若奖项末尾与类型重复（如“洛迦诺电影节展映纪录片”+ genre“纪录片”），去掉末尾类型词；
             # 泛型“电影”除外——“十佳独立电影”的“电影”是荣誉名一部分，保留（松林外）
             if self.genre and self.genre != "电影" and awards_clean.endswith(self.genre):
@@ -293,8 +301,10 @@ class MovieInfo:
         # 当 genre 为 "短片" 时，category 不显示（避免与奖项中的"短片"重复）
         if self.category and not (self.genre == "短片" and self.category == "短片"):
             cat_parts = [c for c in self.category.split('/') if c]
-            # 过滤掉与 genre 有包含/被包含关系的部分，避免"纪录"+"纪录片"="纪录纪录片"
-            filtered = [c for c in cat_parts if not (self.genre and (c in self.genre or self.genre in c))]
+            # 过滤掉与 genre 有包含/被包含关系的部分，避免"纪录"+"纪录片"="纪录纪录片"；
+            # genre 为“短片”且奖项未提及“短片”时保留“短片”部分（“科幻动画短片”整体显示）
+            keep_genre_dup = self.genre == "短片" and not (self.awards and "短片" in self.awards)
+            filtered = [c for c in cat_parts if not (self.genre and not keep_genre_dup and (c in self.genre or self.genre in c))]
             if filtered:
                 combined.append(''.join(filtered))
         # genre 显示条件（“无对白X”类整体类型词始终显示，如“无对白动画”；
