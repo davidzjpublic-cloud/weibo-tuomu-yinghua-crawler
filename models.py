@@ -178,8 +178,10 @@ class MovieInfo:
             ]
             if cast_clean:
                 cast_str = '、'.join(cast_clean[:4])
+                # 超过 4 人截断后加“等”（“A、B、C、D等主演”）
+                cast_suffix = '等主演' if len(cast_clean) > 4 else '主演'
                 pos = self.cast_pos if self.cast_pos is not None else 9999
-                ordered_parts.append((pos, f"{safe_filename(cast_str)}主演"))
+                ordered_parts.append((pos, f"{safe_filename(cast_str)}{cast_suffix}"))
 
         ordered_parts.sort(key=lambda x: x[0])
         return ordered_parts

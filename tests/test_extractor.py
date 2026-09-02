@@ -2027,7 +2027,7 @@ class TestBatch0902Alignment:
         info = self._extract("《神弃之地》\n汤姆·霍兰德/罗伯特·帕丁森/比尔·斯卡斯加德/\n海莉·贝内特/丽莉·吉欧/塞巴斯蒂安·斯坦/\n米娅·华希科沃斯卡主演惊悚犯罪电影\n英语中英双字\n见平👇")
         assert info.cast[:4] == ["汤姆·霍兰德", "罗伯特·帕丁森", "比尔·斯卡斯加德", "海莉·贝内特"]
         filename = info.generate_filename()
-        assert "汤姆·霍兰德、罗伯特·帕丁森、比尔·斯卡斯加德、海莉·贝内特主演" in filename
+        assert "汤姆·霍兰德、罗伯特·帕丁森、比尔·斯卡斯加德、海莉·贝内特等主演" in filename
         assert "丽莉·吉欧" not in filename
 
     def test_space_around_slash_in_cast(self):
@@ -2035,7 +2035,7 @@ class TestBatch0902Alignment:
         info = self._extract("《特朗勃》\n布莱恩·克兰斯顿/戴安·琳恩/海伦·米伦/路易·C·K / 艾丽·范宁主演电影\n奥斯卡金像奖最佳男主角提名作品\n英语中英双字\n见平👇")
         assert info.cast == ["布莱恩·克兰斯顿", "戴安·琳恩", "海伦·米伦", "路易·C·K", "艾丽·范宁"]
         filename = info.generate_filename()
-        assert "布莱恩·克兰斯顿、戴安·琳恩、海伦·米伦、路易·C·K主演" in filename
+        assert "布莱恩·克兰斯顿、戴安·琳恩、海伦·米伦、路易·C·K等主演" in filename
 
     def test_cast_order_follows_text(self):
         # 无主之作：主演顺序照抄原文，不再因空格断链而乱序
@@ -2090,6 +2090,13 @@ class TestBatch0902Alignment:
         filename = info.generate_filename()
         assert "科幻动画短片" in filename
         assert "科幻短片" not in filename
+
+    def test_cast_exactly_four_no_deng(self):
+        # 恰好 4 人时不加“等”（母亲！样式）
+        info = self._extract("《母亲！》\n詹妮弗·劳伦斯、哈维尔·巴登、艾德·哈里斯、米歇尔·菲佛主演\n英语中英双字\n见平👇")
+        filename = info.generate_filename()
+        assert "詹妮弗·劳伦斯、哈维尔·巴登、艾德·哈里斯、米歇尔·菲佛主演" in filename
+        assert "等主演" not in filename
 
     def test_shorts_award_still_suppresses_category_dup(self):
         # 奖项已含“短片”时维持旧行为：类别中的“短片”不重复显示
