@@ -253,8 +253,10 @@ class Lobster:
             logging.debug("跳过非影视内容")
             return []
 
-        # 每处理一个影视微博前空一行，方便日志区分
-        logging.info("")
+        # 每处理一个影视微博前在 CLI 真空一行，方便日志区分；
+        # 控制台日志带时间戳前缀且被精简过滤器拦截，
+        # logging.info("") 打不出空白行，改用 print 写入同一 stdout
+        print(flush=True)
         logging.info(f"处理微博 [{weibo_id}]: {text[:50]}...")
 
         # 提取微博图片（保存时一并上传到夸克目标目录）
