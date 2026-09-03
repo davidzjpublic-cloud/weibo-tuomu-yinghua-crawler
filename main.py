@@ -397,6 +397,13 @@ class Lobster:
             else:
                 logging.debug("未启用 --skip-processed：不写入 processed_weibo.json")
 
+        # 完成一条微博后在 CLI 回显最终形成的完整文件名；
+        # 「生成结果」日志被精简过滤器拦截，控制台看不到。
+        # --save 转存成功时「转存 n. …」已带序号回显过同名，不重复输出
+        if not (self.save_enabled and saved_any):
+            for r in results:
+                print(f"文件名: {r.generate_filename()}")
+
         return results
 
     def _save_to_quark(
