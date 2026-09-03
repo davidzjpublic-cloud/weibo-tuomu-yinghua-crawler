@@ -10,11 +10,21 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import requests
 import websocket
+
+# Windows 下 stdout/stderr 常为 GBK 编码，输出 emoji（如 ✅）会抛 UnicodeEncodeError，
+# 降级为替换字符避免写配置成功后脚本仍以异常退出。
+for _stream in (sys.stdout, sys.stderr):
+    if _stream and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except Exception:
+            pass
 
 _requests_session = None
 

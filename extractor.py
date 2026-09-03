@@ -446,6 +446,17 @@ class MovieExtractor:
         if related_match:
             info.related_tag = related_match.group(1)
 
+        # 提取“X《Y》幕后纪录片/花絮”类描述（旧时光：朴赞郁《老男孩》幕后纪录片）；
+        # 片名《Y》常是全文最后一对书名号，text_after_title 里只剩“幕后纪录片”，
+        # 需在全文上匹配，生成文件名时同样前缀到类别段最前
+        if not info.related_tag:
+            behind_match = re.search(
+                r'([^《》\n，。：:\s]{1,20}《[^》]+》幕后(?:纪录片|短片|花絮|特辑))',
+                text,
+            )
+            if behind_match:
+                info.related_tag = behind_match.group(1)
+
         # 提取出品方标注（如“A24出品科幻片”中的“A24出品”），
         # 生成文件名时作为独立段落置于获奖之后
         producer_match = re.search(r'([A-Za-z][A-Za-z0-9]{0,14}出品)', text_after_title)

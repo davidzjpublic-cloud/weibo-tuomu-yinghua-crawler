@@ -730,7 +730,10 @@ def main() -> None:
     args = parse_args()
     setup_logging(args.verbose)
 
-    logging.info(f"启动参数: uid={args.uid}, max_pages={args.max_pages}, target_date={args.target_date}")
+    logging.info(
+        f"启动参数: uid={args.uid}, max_pages={args.max_pages}, "
+        f"target_date={args.target_date}, save={'开' if args.save else '关'}"
+    )
 
     if not os.path.exists(args.config):
         logging.error(f"配置文件不存在: {args.config}")

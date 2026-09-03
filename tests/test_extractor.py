@@ -2105,3 +2105,57 @@ class TestBatch0902Alignment:
         filename = info.generate_filename()
         assert "高分科幻" in filename
         assert "科幻短片" not in filename
+
+
+class TestBatch0903Alignment:
+    """2026-09-03 批次对齐：柏林主竞赛单元、连写语言、幕后纪录片、奖项词混入人名、欧洲电影奖动画片。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_berlin_main_competition_short(self):
+        # 诗人之城：原文省略“电影节”，带最佳短片细分
+        info = self._extract("《诗人之城》\n柏林主竞赛单元最佳短片提名作品\n英/波斯语中英双字\n见平👇")
+        assert info.awards == "柏林主竞赛单元最佳短片提名作品"
+        filename = info.generate_filename()
+        assert "柏林主竞赛单元最佳短片提名作品" in filename
+
+    def test_berlin_main_competition_bare(self):
+        # 裸“柏林主竞赛单元入围作品”（不带细分）也应命中
+        info = self._extract("《X》\n柏林主竞赛单元入围作品\n英语中字\n见平👇")
+        assert info.awards == "柏林主竞赛单元入围作品"
+
+    def test_serbo_croatian_language(self):
+        # 阿依达：连写“塞尔维亚克罗地亚语”优先于“克罗地亚语”命中
+        info = self._extract("《阿依达，你往何处去？》\n威尼斯电影节金狮奖提名作品\n塞尔维亚克罗地亚语中字\n见平👇")
+        assert info.language == "塞尔维亚克罗地亚语"
+        assert info.subtitle == "中字"
+        # 原“克罗地亚语”不受影响（地下）
+        info = self._extract("《地下》\n塞尔维亚语中英双字\n见平👇")
+        assert info.language == "塞尔维亚语"
+
+    def test_behind_the_scenes_related_tag(self):
+        # 旧时光：片名是全文最后一对书名号，需全文匹配“X《Y》幕后纪录片”
+        info = self._extract("《旧时光》\n朴赞郁《老男孩》幕后纪录片\n韩语中字\n见平👇")
+        assert info.related_tag == "朴赞郁《老男孩》幕后纪录片"
+        filename = info.generate_filename()
+        assert "朴赞郁《老男孩》幕后纪录片" in filename
+        # genre 已含在 related_tag 结尾，不重复显示
+        assert "幕后纪录片纪录片" not in filename
+
+    def test_award_words_filtered_from_writer(self):
+        # 幽灵世界：“最佳改编剧本”中的“改编”含“编剧”，不得把奖项词当编剧人名
+        info = self._extract("《幽灵世界》\n斯嘉丽·约翰逊/索拉·伯奇主演电影\n奥斯卡金像奖最佳改编剧本提名作品\n英语中字\n见平👇")
+        filename = info.generate_filename()
+        assert "编剧" not in filename.replace("最佳改编剧本", "")
+        assert "奥斯卡金像奖最佳改编剧本提名作品" in filename
+
+    def test_efa_animation_award(self):
+        # 未来学大会：欧洲电影奖最佳动画片细分
+        info = self._extract("《未来学大会》\n改编自斯坦尼斯瓦夫·莱姆同名高分原著\n欧洲电影奖最佳动画片获奖作品\n英语中英双字\n见平👇")
+        assert "欧洲电影奖最佳动画片获奖作品" in (info.awards or "")
+        filename = info.generate_filename()
+        assert filename.startswith("未来学大会")
+        assert "改编自斯坦尼斯瓦夫·莱姆同名高分原著 欧洲电影奖最佳动画片获奖作品" in filename

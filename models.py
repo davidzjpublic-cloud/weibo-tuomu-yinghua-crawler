@@ -318,6 +318,10 @@ class MovieInfo:
         # 短片不显示 genre
         if show_genre and self.genre == "短片":
             show_genre = False
+        # “X《Y》幕后纪录片”类 related_tag 已以类型词结尾时不再重复显示 genre
+        # （旧时光：“朴赞郁《老男孩》幕后纪录片 韩语中字”，避免“…幕后纪录片纪录片”）
+        if show_genre and self.related_tag and self.related_tag.endswith(self.genre):
+            show_genre = False
         # 奖项本身已含“纪录”且无额外评级时，不再重复显示 genre
         # （含“纪录长片”这类变体，如“奥斯卡最佳纪录长片获奖作品”；
         # 末尾“纪录片”已被剥离进 genre 的情形除外）
