@@ -384,7 +384,13 @@ class Lobster:
         # 4. 转存（仅在 --save 时执行）
         saved_any = False
         if self.save_enabled and results:
-            saved_any = self._save_to_quark(source_link, results, weibo_id, image_urls)
+            try:
+                saved_any = self._save_to_quark(source_link, results, weibo_id, image_urls)
+            except Exception as e:
+                # 转存失败不丢已提取的结果：仍写入 results（saved=False），
+                # 且该微博未标记已处理，下次运行会自动重试
+                logging.error(f"微博 {weibo_id} 转存失败，保留提取结果待重试: {e}")
+                saved_any = False
             # 逐条记录转存情况：有夸克 fid 且整单转存成功才算已转存
             for r in results:
                 r.saved = saved_any and bool(r.quark_fid)

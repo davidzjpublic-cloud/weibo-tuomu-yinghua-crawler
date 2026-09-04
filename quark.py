@@ -679,6 +679,29 @@ class QuarkClient:
                 if not saved_fids and data.get("data", {}).get("task_id"):
                     saved_fids = self._wait_save_task(data["data"]["task_id"])
 
+                # 轮询超时但任务可能已在服务端迟完成（排队超轮询窗口）：
+                # 按分享原名探测目标目录，找到即复用，避免重发造成重复转存
+                if not saved_fids:
+                    adopted = self._find_saved_by_name(to_dir_fid, items)
+                    if adopted is not None:
+                        logger.warning(
+                            "转存任务轮询超时但服务端已生效，复用目标目录中已转存项: "
+                            + ", ".join(r["fid"] for r in adopted)
+                        )
+                        self._cleanup_duplicate_saves(
+                            to_dir_fid, items, [r["fid"] for r in adopted]
+                        )
+                        return adopted
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"转存任务轮询未完成（第 {attempt} 次），"
+                            f"{attempt * 2} 秒后重新提交"
+                        )
+                        time.sleep(attempt * 2)
+                        continue
+                    logger.error("转存任务多次轮询未完成，放弃")
+                    return []
+
                 results = []
                 for idx, saved_fid in enumerate(saved_fids):
                     original = items[idx] if idx < len(items) else {}
@@ -785,10 +808,14 @@ class QuarkClient:
     def _wait_save_task(
         self,
         task_id: str,
-        max_attempts: int = 20,
-        interval: float = 1.0,
+        max_attempts: int = 40,
+        interval: float = 2.0,
     ) -> List[str]:
-        """轮询转存任务，返回保存后的顶层 fid 列表。"""
+        """轮询转存任务，返回保存后的顶层 fid 列表。
+
+        服务端任务高峰期（凌晨批量转存）可能排队超过一分钟才完成，
+        轮询窗口给到约两分半，避免任务实际会完成却提前放弃。
+        """
         url = f"{QUARK_SHARE_HOST}/1/clouddrive/task"
         for attempt in range(max_attempts):
             time.sleep(interval)
