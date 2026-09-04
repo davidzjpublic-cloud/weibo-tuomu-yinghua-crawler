@@ -2159,3 +2159,33 @@ class TestBatch0903Alignment:
         filename = info.generate_filename()
         assert filename.startswith("未来学大会")
         assert "改编自斯坦尼斯瓦夫·莱姆同名高分原著 欧洲电影奖最佳动画片获奖作品" in filename
+
+
+class TestBatch0904Alignment:
+    """2026-09-04 批次对齐：综艺常驻嘉宾、“修复版”版本说明。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_variety_regulars(self):
+        # 心灵灯塔：综艺“X/Y常驻”渲染为“星野源、若林正恭常驻”，按角色段位置排列
+        info = self._extract("《心灵灯塔》\n星野源/若林正恭常驻高分综艺\n全6集 日语中字\n见平👇")
+        assert info.regulars == ["星野源", "若林正恭"]
+        filename = info.generate_filename()
+        assert "星野源、若林正恭常驻 高分综艺" in filename
+
+    def test_regulars_truncate_over_four(self):
+        # 超过 4 人取前 4 加“等”（与主演同款规则）
+        info = self._extract("《X》\n张三/李四/王五/赵六/钱七常驻高分综艺\n全12集 日语中字\n见平👇")
+        filename = info.generate_filename()
+        assert "张三、李四、王五、赵六等常驻" in filename
+        assert "钱七常驻" not in filename
+
+    def test_restore_tag(self):
+        # 爱在暹罗：“修复版”独立成段，置于类别段之后、语言之前
+        info = self._extract("《爱在暹罗》\n维特维斯特·海伦亚沃恩酷/马里奥·毛瑞尔主演高分电影\n修复版 泰语中字\n见平👇")
+        assert info.restore_tag == "修复版"
+        filename = info.generate_filename()
+        assert "高分片 修复版 泰语中字" in filename

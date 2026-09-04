@@ -415,6 +415,25 @@ class MovieExtractor:
                 if info.cast_pos is None:
                     info.cast_pos = best_cast_pos
 
+        # 提取综艺“X/Y常驻”常驻嘉宾（心灵灯塔：星野源/若林正恭常驻高分综艺），
+        # 按角色段位置渲染为“星野源、若林正恭常驻”
+        for m in re.finditer(
+            r'([^《》\n\s]{2,15}(?:\s*[/、，,]\s*[^《》\n\s]{2,15})*)\s*常驻',
+            text,
+        ):
+            raw = m.group(1).strip()
+            regulars = [
+                c.strip()
+                for c in re.split(r'[/、，,\s]+', raw)
+                if c.strip() and 1 < len(c.strip()) < 15
+                and not any(kw in c for kw in INVALID_CAST_KEYWORDS)
+                and not c.isdigit()
+            ]
+            if regulars:
+                info.regulars = regulars
+                info.regulars_pos = m.start()
+                break
+
         # 提取类别 - 只从最后一个书名号后的文本中提取，避免标题关键词混入
         text_after_title = text
         last_guillemet_end = text.rfind('》')
@@ -462,6 +481,12 @@ class MovieExtractor:
         producer_match = re.search(r'([A-Za-z][A-Za-z0-9]{0,14}出品)', text_after_title)
         if producer_match:
             info.producer_tag = producer_match.group(1)
+
+        # 提取“修复版”版本说明（爱在暹罗：修复版 泰语中字），
+        # 生成文件名时作为独立段落置于类别段之后
+        restore_match = re.search(r'(修复版)', text_after_title)
+        if restore_match:
+            info.restore_tag = restore_match.group(1)
 
         # 提取“X作品”主创署名（如“佩德罗·阿莫多瓦作品”，不带“导演/执导”字样的署名），
         # 生成文件名时排在导演/主演之后、获奖之前；

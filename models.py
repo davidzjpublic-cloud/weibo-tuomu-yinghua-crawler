@@ -38,6 +38,11 @@ class MovieInfo:
     # “X版”版本署名（如同一原著多版影视中的“鳄渊晴子版”），
     # 生成文件名时作为独立段落置于获奖之后
     version_credit: Optional[str] = None
+    # 综艺“X/Y常驻”常驻嘉宾（心灵灯塔：星野源/若林正恭常驻），按角色段位置渲染
+    regulars: List[str] = field(default_factory=list)
+    regulars_pos: Optional[int] = None
+    # “修复版”等版本说明（爱在暹罗），独立段落置于类别段之后、季集/语言之前
+    restore_tag: Optional[str] = None
     rating: Optional[str] = None
     awards: Optional[str] = None
     douban_rating: Optional[str] = None
@@ -182,6 +187,22 @@ class MovieInfo:
                 cast_suffix = '等主演' if len(cast_clean) > 4 else '主演'
                 pos = self.cast_pos if self.cast_pos is not None else 9999
                 ordered_parts.append((pos, f"{safe_filename(cast_str)}{cast_suffix}"))
+
+        if self.regulars:
+            invalid_cast_keywords = FILENAME_INVALID_CAST_KEYWORDS
+            regulars_clean = [
+                c for c in self.regulars
+                if c not in combined_names
+                and len(c) < 15
+                and c not in invalid_cast_keywords
+                and not c.isdigit()
+            ]
+            if regulars_clean:
+                # 与主演同款截断规则（超过 4 人取前 4 加“等”）
+                reg_str = '、'.join(regulars_clean[:4])
+                reg_suffix = '等常驻' if len(regulars_clean) > 4 else '常驻'
+                pos = self.regulars_pos if self.regulars_pos is not None else 9999
+                ordered_parts.append((pos, f"{safe_filename(reg_str)}{reg_suffix}"))
 
         ordered_parts.sort(key=lambda x: x[0])
         return ordered_parts
@@ -349,6 +370,10 @@ class MovieInfo:
                 combined.append(self.genre)
         if combined:
             bracket_parts.append(''.join(combined))
+
+        # “修复版”等版本说明置于类别段之后、季集/语言之前（爱在暹罗：“高分片 修复版 泰语中字”）
+        if self.restore_tag:
+            bracket_parts.append(safe_filename(self.restore_tag))
 
         season_ep = []
         if self.season_extra:
