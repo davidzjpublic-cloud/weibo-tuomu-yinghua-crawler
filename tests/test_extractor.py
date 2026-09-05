@@ -2189,3 +2189,66 @@ class TestBatch0904Alignment:
         assert info.restore_tag == "修复版"
         filename = info.generate_filename()
         assert "高分片 修复版 泰语中字" in filename
+
+
+class TestBatch0905Alignment:
+    """2026-09-05 批次对齐：金像奖最佳电影、旬报年度十佳、青龙剧集奖、葡英语、国粤双语、加长版、前N季+第X季XX篇。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_hkfa_best_film(self):
+        # 天水围的日与夜：金像奖“最佳电影”分支 + 国粤双语
+        info = self._extract("《天水围的日与夜》\n香港电影金像奖最佳电影提名作品\n许鞍华导演高分作品\n国粤双语中字\n见平👇")
+        assert info.awards == "香港电影金像奖最佳电影提名作品"
+        assert info.language == "国粤双语"
+        assert info.subtitle == "中字"
+
+    def test_kinyuri_top10(self):
+        # 错乱的一代：电影旬报2016年度十佳电影（无“奖”字带年份）
+        info = self._extract("《错乱的一代》\n柳乐优弥/菅田将晖/小松菜奈主演 真利子哲也导演作品\n洛迦诺电影节当代电影人单元金豹奖提名作品\n电影旬报2016年度十佳电影\n日语中字\n见平👇")
+        assert "洛迦诺电影节当代电影人单元金豹奖提名作品" in info.awards
+        assert "电影旬报2016年度十佳电影" in info.awards
+
+    def test_portuguese_english_language(self):
+        # 巴克劳：葡/英语 → 葡英语
+        info = self._extract("《巴克劳》\n戛纳电影节金棕榈奖提名作品\n小克莱伯·门多萨导演作品\n葡/英语中英双字\n见平👇")
+        assert info.language == "葡英语"
+        assert info.subtitle == "中英双字"
+
+    def test_extended_cut_tag(self):
+        # 铁血战士：杀戮之王：加长版与修复版同位，置于类别段之后
+        info = self._extract("《铁血战士:杀戮之王》\n热门高分动作科幻动画推荐\n加长版 英语中英双字\n见平👇")
+        assert info.restore_tag == "加长版"
+        filename = info.generate_filename()
+        assert "科幻动作动画 加长版 英语中英双字" in filename
+
+    def test_blue_dragon_series_award(self):
+        # 海妖的呼唤：青龙剧集奖“最优秀作品奖获奖作品”去中间“奖”字
+        info = self._extract("《海妖的呼唤:火之岛生存战》\n韩国青龙剧集奖最优秀作品奖获奖作品\n热门高分真人秀推荐\n全10期 韩语中字\n见平👇")
+        assert "韩国青龙剧集奖最优秀作品获奖作品" in info.awards
+
+    def test_multi_season_range_extra(self):
+        # 晚酌的流派：前4季+第五季夏篇 作为季描述整体
+        info = self._extract("《晚酌的流派》\n栗山千明主演美食剧集\n前4季+第五季夏篇全10集 日语中字\n见平👇")
+        assert info.season_extra == "前4季+第五季夏篇"
+        assert info.episodes == 10
+        filename = info.generate_filename()
+        assert "美食剧集 前4季+第五季夏篇 全10集" in filename
+
+    def test_award_list_year_keeps_title_year(self):
+        # 错乱的一代：奖项里的“2016”是榜单年份（电影旬报2016年度十佳电影），
+        # 不代表上映年份已展示，标题年份照常追加；
+        # 对照组：改编说明自带的“2024版”视为已展示，不追加年份
+        info = self._extract("《错乱的一代》\n电影旬报2016年度十佳电影\n日语中字\n见平👇")
+        info.year = 2016
+        filename = info.generate_filename()
+        assert filename.startswith("错乱的一代 2016 （")
+        assert "电影旬报2016年度十佳电影" in filename
+
+        info2 = self._extract("《大师与玛格丽特》\n改编自同名高分原著\n2024版 俄语中英双字\n见平👇")
+        filename2 = info2.generate_filename()
+        assert "2024" in filename2
+        assert filename2.count("2024") == 1

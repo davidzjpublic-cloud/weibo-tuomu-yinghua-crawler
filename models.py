@@ -267,10 +267,18 @@ class MovieInfo:
             parts.append(season_range)
 
         if self.year:
-            # 标题或改编/获奖信息中已含年份时不再重复追加
+            # 标题或“改编自…N年版”片段中已含年份时不再重复追加
+            # （大师与玛格丽特“改编自同名高分原著 2024版”）；
+            # 奖项中的年份是榜单/届次年份（电影旬报2016年度十佳电影），
+            # 不代表上映年份已展示，标题年份照常追加（错乱的一代）
             year_str = str(self.year)
-            title_text = f"{self.chinese_name or ''}{self.foreign_name or ''}{self.awards or ''}"
-            if year_str not in title_text:
+            title_text = f"{self.chinese_name or ''}{self.foreign_name or ''}"
+            has_year = year_str in title_text
+            if not has_year and self.awards and self.awards.startswith('改编自'):
+                # “改编自同名高分原著 2024版”的“N年版”属于改编说明的一部分，
+                # 与“电影旬报2016年度十佳电影”这类榜单年份不同，视为已展示
+                has_year = f'{year_str}版' in self.awards
+            if not has_year:
                 parts.append(year_str)
 
         bracket_parts = []

@@ -482,9 +482,10 @@ class MovieExtractor:
         if producer_match:
             info.producer_tag = producer_match.group(1)
 
-        # 提取“修复版”版本说明（爱在暹罗：修复版 泰语中字），
+        # 提取“修复版/加长版”版本说明（爱在暹罗：修复版 泰语中字；
+        # 铁血战士：杀戮之王：加长版 英语中英双字），
         # 生成文件名时作为独立段落置于类别段之后
-        restore_match = re.search(r'(修复版)', text_after_title)
+        restore_match = re.search(r'(修复版|加长版)', text_after_title)
         if restore_match:
             info.restore_tag = restore_match.group(1)
 
@@ -534,8 +535,9 @@ class MovieExtractor:
                 # “最佳X奖获奖/提名”中“奖”与“获奖/提名”语义重复，按惯例去掉
                 # （如“柏林电影节最佳纪录片奖获奖作品”→“柏林电影节最佳纪录片获奖作品”）；
                 # “最佳X大奖获奖”同理去掉“大奖”（IDFA最佳长纪录片大奖获奖作品）；
+                # “最优秀作品奖获奖”同理（韩国青龙剧集奖最优秀作品奖获奖作品）；
                 # 不影响“金贝壳奖获奖作品”这类奖项名本身以“奖”结尾的形式
-                award_text = re.sub(r'(最佳[^，。\s]{1,8}?)大?奖(获奖|提名)', r'\1\2', award_text)
+                award_text = re.sub(r'((?:最佳|最优秀)[^，。\s]{0,8}?)大?奖(获奖|提名)', r'\1\2', award_text)
                 # “纽约影评人协会奖”按基准惯例不保留“奖”字（与“金马最佳”同风格；
                 # 注意“美国国家影评人协会奖”仍保留“奖”，二者不共用此规则）
                 award_text = award_text.replace('纽约影评人协会奖', '纽约影评人协会')
@@ -721,6 +723,8 @@ class MovieExtractor:
             r'(全\d+部)',
             r'(全\d+季\+番外\+花絮)',
             r'(全\d+季\+电影)',
+            # “前N季+第X季XX篇”多季连看（晚酌的流派：前4季+第五季夏篇全10集）
+            r'(前\d+季\+第[一二两三四五六七八九十\d]+季[^，。\s\n全]{0,8})',
             r'(第[一二两三四五六七八九十\d]+季(?:首播至第[一二两三四五六七八九十\d]+集)?(?:\s+含中字(?:前|第)[一二两三四五六七八九十\d]+季|\s+含[^\n，。:：]{0,8}?第[一二两三四五六七八九十\d]+季)?)',
             # 无季数、只有“首播至第X集/期”的连载状态（如 绿灯军团）
             r'(首播至第[一二两三四五六七八九十\d]+[集期])',
@@ -734,7 +738,7 @@ class MovieExtractor:
                     info.season_extra = captured
                     break
                 # 仅当捕获到除“第X季”之外的附加信息时才使用
-                if '首播' in captured or '含' in captured or '番外' in captured or '+电影' in captured:
+                if '首播' in captured or '含' in captured or '番外' in captured or '+电影' in captured or captured.startswith('前'):
                     info.season_extra = captured.replace('\n', ' ')
                     # “含中英双字第一季”这类含语言/字幕的附带季说明，
                     # 语言已单独提取，改写为“含第一季”（“含中字第X季”惯用语原样保留）
