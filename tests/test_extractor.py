@@ -2252,3 +2252,28 @@ class TestBatch0905Alignment:
         filename2 = info2.generate_filename()
         assert "2024" in filename2
         assert filename2.count("2024") == 1
+
+
+class TestBatch0906Alignment:
+    """2026-09-06 批次对齐：葡语中葡双字、凯撒奖省略“电影”。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_portuguese_with_cn_pt_subtitle(self):
+        # 黑金高墙：“葡语中葡双字”——葡语入语言表、中葡双字入字幕表
+        info = self._extract("《黑金高墙》\n高分惊悚犯罪剧集推荐\n全两季 葡语中葡双字\n见平👇")
+        assert info.language == "葡语"
+        assert info.subtitle == "中葡双字"
+        filename = info.generate_filename()
+        assert "葡语中葡双字" in filename
+
+    def test_cesar_award_without_dianying(self):
+        # 曼哈顿谋杀疑案：原文“法国凯撒奖”省略“电影”，照常提取；
+        # 对照：黑水“法国凯撒电影奖”全称不受影响
+        info = self._extract("《曼哈顿谋杀疑案》\n伍迪·艾伦/黛安·基顿主演  伍迪·艾伦导演作品\n法国凯撒奖最佳外语片提名作品\n英语中英双字\n见平👇")
+        assert info.awards == "法国凯撒奖最佳外语片提名作品"
+        info2 = self._extract("《黑水》\n法国凯撒电影奖最佳外语片提名作品\n英语中英双字\n见平👇")
+        assert info2.awards == "法国凯撒电影奖最佳外语片提名作品"
