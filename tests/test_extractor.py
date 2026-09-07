@@ -1268,15 +1268,18 @@ class TestMovieExtractor:
         assert info.version_credit == "鳄渊晴子版"
         filename = info.generate_filename()
         assert "改编自川端康成同名原著 鳄渊晴子版 日语中字" in filename
-        # 通用版本词不作版本署名
+        # 通用版本词不作版本署名；年份版本词“2024版”除外——
+        # 同一片名可能在不同年份有不同版本，独立成词时同样提取
         for raw in (
             "《海贼王(真人版）》\n热门高分奇幻动作剧集推荐",
             "《例片》\n修复版 高清电影推荐",
-            "《例片》\n2024版 悬疑剧集推荐",
         ):
             other = extractor.extract(raw, "5335700000000099", "2026-08-26")
             assert other is not None
             assert other.version_credit is None
+        year_ver = extractor.extract("《例片》\n2024版 悬疑剧集推荐", "5335700000000099", "2026-08-26")
+        assert year_ver is not None
+        assert year_ver.version_credit == "2024版"
 
     def test_extract_variety_show_qi_episodes_and_slash_title(self, extractor):
         # 回归：综艺类型 + “全13期”期数段；片名自带的“/”保留（19/20 成年初体验）

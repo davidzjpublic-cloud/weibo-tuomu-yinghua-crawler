@@ -569,12 +569,13 @@ class MovieExtractor:
             else:
                 info.awards = adaptation_text
 
-        # 提取“YYYY版”年份版本说明（吸血鬼：“1915版中字”），生成文件名时
-        # 与“X版”版本署名同位（获奖之后、语言之前）；仅限与后续文字粘连的
-        # 用法——独立成词的“2024版 悬疑剧集推荐”与已被“改编自…YYYY版”
-        # 吸收进奖项的（大师与玛格丽特）均不提取
+        # 提取“YYYY版”年份版本说明（吸血鬼：“1915版中字”；独立成词的
+        # “2024版 悬疑剧集推荐”同理——同一片名可能在不同年份有不同版本，
+        # 年份版本词需保留），生成文件名时与“X版”版本署名同位（获奖之后、
+        # 语言之前）；已被“改编自…YYYY版”吸收进奖项的不重复提取
+        # （大师与玛格丽特“改编自同名高分原著 2024版”）
         if not info.version_credit:
-            year_version = re.search(r'((?:19|20)\d{2}版)(?=\S)', text_after_title)
+            year_version = re.search(r'((?:19|20)\d{2}版)', text_after_title)
             if year_version and year_version.group(1) not in (info.awards or ''):
                 info.version_credit = year_version.group(1)
 
