@@ -2277,3 +2277,38 @@ class TestBatch0906Alignment:
         assert info.awards == "法国凯撒奖最佳外语片提名作品"
         info2 = self._extract("《黑水》\n法国凯撒电影奖最佳外语片提名作品\n英语中英双字\n见平👇")
         assert info2.awards == "法国凯撒电影奖最佳外语片提名作品"
+
+
+class TestBatch0907Alignment:
+    """2026-09-07 批次对齐：“YYYY版”年份版本说明、改编自人名缩写空格。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_year_version_credit(self):
+        # 吸血鬼：“1915版中字”的“1915版”作为版本说明，置于导演之后、语言之前
+        info = self._extract("《吸血鬼》\n路易斯·菲拉德导演作品\n1915版中字\n见平👇")
+        assert info.version_credit == "1915版"
+        filename = info.generate_filename()
+        assert "路易斯·菲拉德导演 1915版 中字" in filename
+
+    def test_year_version_not_duplicated_with_adaptation(self):
+        # 大师与玛格丽特：“2024版”已被“改编自同名高分原著 2024版”吸收，
+        # 不再作为版本署名单独立段
+        info = self._extract("《大师与玛格丽特》\n改编自同名高分原著\n2024版 俄语中英双字\n见平👇")
+        assert info.version_credit is None
+        filename = info.generate_filename()
+        assert "改编自同名高分原著 2024版" in filename
+
+    def test_adaptation_initialism_space(self):
+        # 乡下人的悲歌：“J.D. 万斯”缩写点号后的空格并回，改编段整体
+        # 前置于主演，不再被空格拆开、“万斯同名热门原著”误排到导演之后
+        info = self._extract(
+            "《乡下人的悲歌》\n艾米·亚当斯/格伦·克洛斯主演  朗·霍华德导演作品\n"
+            "改编自J.D. 万斯同名热门原著\n英语中英双字\n见平👇"
+        )
+        assert info.awards == "改编自J.D.万斯同名热门原著"
+        filename = info.generate_filename()
+        assert "改编自J.D.万斯同名热门原著 艾米·亚当斯、格伦·克洛斯主演" in filename

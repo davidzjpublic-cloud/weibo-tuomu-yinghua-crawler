@@ -561,10 +561,22 @@ class MovieExtractor:
             )
         if adaptation_match:
             adaptation_text = adaptation_match.group(1).replace('\n', ' ').strip()
+            # 缩写点号后的空格并回名字（“改编自J.D. 万斯同名热门原著”→“J.D.万斯同名…”），
+            # 避免文件名组装时改编段被空格拆开、剩余部分误排到奖项位
+            adaptation_text = re.sub(r'([A-Za-z]\.)\s+', r'\1', adaptation_text)
             if info.awards:
                 info.awards = adaptation_text + ' ' + info.awards
             else:
                 info.awards = adaptation_text
+
+        # 提取“YYYY版”年份版本说明（吸血鬼：“1915版中字”），生成文件名时
+        # 与“X版”版本署名同位（获奖之后、语言之前）；仅限与后续文字粘连的
+        # 用法——独立成词的“2024版 悬疑剧集推荐”与已被“改编自…YYYY版”
+        # 吸收进奖项的（大师与玛格丽特）均不提取
+        if not info.version_credit:
+            year_version = re.search(r'((?:19|20)\d{2}版)(?=\S)', text_after_title)
+            if year_version and year_version.group(1) not in (info.awards or ''):
+                info.version_credit = year_version.group(1)
 
         # 奖项/改编片段之外的正文（评级、类别的独立用法在这里判断）
         non_award_text = text
