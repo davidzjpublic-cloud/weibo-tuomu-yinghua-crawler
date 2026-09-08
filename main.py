@@ -365,6 +365,7 @@ class Lobster:
                 season_raw=base_info.season_raw,
                 season_extra=base_info.season_extra,
                 episodes=base_info.episodes,
+                episodes_extra=base_info.episodes_extra,
                 source_link=source_link,
                 quark_fid=item.get("fid"),
                 quark_file_name=item.get("file_name"),

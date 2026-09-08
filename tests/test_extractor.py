@@ -2315,3 +2315,42 @@ class TestBatch0907Alignment:
         assert info.awards == "改编自J.D.万斯同名热门原著"
         filename = info.generate_filename()
         assert "改编自J.D.万斯同名热门原著 艾米·亚当斯、格伦·克洛斯主演" in filename
+
+
+class TestBatch0908Alignment:
+    """2026-09-08 批次对齐：恐怖丧尸类别、东京电影节最佳影片提名、
+    全N集+SP 集数后缀、意/恶/英语语言组合。"""
+
+    @staticmethod
+    def _extract(text):
+        from extractor import MovieExtractor
+        return MovieExtractor().extract(text)
+
+    def test_zombie_category(self):
+        # 死亡片场：“热门恐怖丧尸剧集”的“丧尸”作为类别词随“恐怖”一起显示
+        info = self._extract("《死亡片场》\n热门恐怖丧尸剧集推荐\n全5集 英语中字\n见平👇")
+        assert info.category == "恐怖/丧尸"
+        filename = info.generate_filename()
+        assert "热门恐怖丧尸剧集 全5集" in filename
+
+    def test_tokyo_festival_best_film_nomination(self):
+        # 魔毯：“东京电影节主竞赛单元最佳影片提名作品”整体保留，不再截断在“主竞赛单元”
+        info = self._extract("《魔毯》\n东京电影节主竞赛单元最佳影片提名作品\n莫森·马克马尔巴夫导演作品\n波斯语中字\n见平👇")
+        assert info.awards == "东京电影节主竞赛单元最佳影片提名作品"
+        filename = info.generate_filename()
+        assert "莫森·马克马尔巴夫导演 东京电影节主竞赛单元最佳影片提名作品 波斯语中字" in filename
+
+    def test_episodes_sp_suffix(self):
+        # 女子警察的逆袭：“全9集+SP”的“+SP”特别篇标注随集数一起显示
+        info = self._extract("《女子警察的逆袭》\n户田惠梨香/永野芽郁主演高分剧集\n全9集+SP  日语中日双字\n见平👇")
+        assert info.episodes == 9
+        assert info.episodes_extra == "+SP"
+        filename = info.generate_filename()
+        assert "高分剧集 全9集+SP 日语中日双字" in filename
+
+    def test_yi_e_ying_language(self):
+        # 我是爱：原文“意/恶/英语”的“恶”为干扰字，按基准取“意英语”
+        info = self._extract("《我是爱》\n威尼斯电影节地平线单元奖最佳影片提名作品\n蒂尔达·斯文顿主演高分电影\n意/恶/英语中英双字\n见平👇")
+        assert info.language == "意英语"
+        filename = info.generate_filename()
+        assert "高分片 意英语中英双字" in filename

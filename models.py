@@ -50,6 +50,8 @@ class MovieInfo:
     season_raw: Optional[str] = None
     season_extra: Optional[str] = None
     episodes: Optional[int] = None
+    # 集数后缀标注（女子警察的逆袭：“全9集+SP”的“+SP”特别篇），随集数显示
+    episodes_extra: Optional[str] = None
     source_link: Optional[str] = None
     quark_fid: Optional[str] = None
     quark_file_name: Optional[str] = None
@@ -391,7 +393,10 @@ class MovieInfo:
         elif self.season:
             season_ep.append(f"第{self.season}季")
         if self.episodes:
-            season_ep.append(f"全{self.episodes}集")
+            ep_str = f"全{self.episodes}集"
+            if self.episodes_extra:
+                ep_str += self.episodes_extra
+            season_ep.append(ep_str)
         if season_ep:
             bracket_parts.append(' '.join(season_ep))
 

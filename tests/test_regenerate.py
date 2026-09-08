@@ -87,6 +87,7 @@ def build_filename(
         season_raw=info.season_raw,
         season_extra=info.season_extra,
         episodes=info.episodes,
+        episodes_extra=info.episodes_extra,
         raw_text=info.raw_text,
         director_pos=info.director_pos,
         supervisor_pos=info.supervisor_pos,

@@ -701,6 +701,10 @@ class MovieExtractor:
                 except ValueError:
                     pass
 
+        # 集数后缀标注（女子警察的逆袭：“全9集+SP”的“+SP”特别篇），随集数一起显示
+        if re.search(r'全[0-9一二两三四五六七八九十]+集\+SP(?![A-Za-z])', text):
+            info.episodes_extra = '+SP'
+
         # 综艺“期”数（如“全13期”），保留“期”单位存入季集段
         qi_match = re.search(r'全([0-9一二两三四五六七八九十]+)期', text)
         if qi_match:
