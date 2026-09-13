@@ -263,6 +263,14 @@ class MovieInfo:
                 # 外文名自带季数后缀（如“Екатерина Сезон 1”）时，
                 # 去掉末尾数字与“1-N季”合并为“Сезон 1-N季”
                 foreign = re.sub(r'(Сезон|Season)\s*\d+\s*$', r'\1', foreign).rstrip()
+                # 其余拉丁字母季数词后缀整体去除（占领区：“Okkupert Sesong 1”
+                # 全季打包→“Okkupert”，季词在“1-N季”前没有信息量）
+                foreign = re.sub(
+                    r'\s*(?:Sesong|Saison|Staffel|Stagione|Temporada|Sezon[ao]?'
+                    r'|Sezóna|Évad|Kausi|Hooaeg)\s*\d+\s*$',
+                    '',
+                    foreign,
+                ).rstrip()
             parts.append(foreign)
 
         if season_range:

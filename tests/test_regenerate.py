@@ -25,6 +25,7 @@ def build_filename(
     quark_file_name: str,
     fallback_foreign_name: str = None,
     fallback_douban_rating: str = None,
+    douban_failed_at_crawl: bool = False,
 ) -> str:
     """用当前代码从单条微博文本生成文件名。"""
     extractor = MovieExtractor()
@@ -40,7 +41,7 @@ def build_filename(
 
     foreign_name = None
     douban_rating_from_search = None
-    if chinese_name:
+    if chinese_name and not douban_failed_at_crawl:
         # 与 main.py 一致：主演/导演名用于豆瓣同名条目甄别
         hint_names = list(info.cast or [])
         if info.director:
@@ -121,11 +122,15 @@ def main():
         # 去掉已有的“豆瓣”前缀，方便统一格式化
         if fallback_rating and fallback_rating.startswith("豆瓣"):
             fallback_rating = fallback_rating[2:]
+        # 爬取时豆瓣搜索即失败（外文名与评分均空）的条目，重放无豆瓣数据的状态，
+        # 避免重生成时豆瓣恢复可用而多出基准里没有的信息（单身女孩）
+        douban_failed = not fallback_foreign and not fallback_rating
         filename = build_filename(
             raw_text,
             quark_file_name,
             fallback_foreign_name=fallback_foreign,
             fallback_douban_rating=fallback_rating,
+            douban_failed_at_crawl=douban_failed,
         )
         results.append(filename)
 

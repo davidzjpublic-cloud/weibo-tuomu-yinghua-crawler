@@ -12,6 +12,8 @@ from config import (
     CAST_CLEAN_PREFIX_KEYWORDS,
     CHINESE_NUMBERS,
     FILM_FESTIVAL_KEYWORDS,
+    GENERIC_AWARD_NAME_BLOCKLIST,
+    GENERIC_AWARD_PATTERN,
     GENRES,
     INVALID_CAST_KEYWORDS,
     INVALID_DIRECTOR_KEYWORDS,
@@ -84,6 +86,34 @@ class MovieExtractor:
                 return None
         return ''.join(resolved)
 
+    @staticmethod
+    def _normalize_award_text(award_text: str) -> str:
+        """奖项文本的机械清理（不改变原文措辞，只去重）：
+        “最佳X奖获奖/提名”中“奖”与“获奖/提名”语义重复，按惯例去掉
+        （如“柏林电影节最佳纪录片奖获奖作品”→“柏林电影节最佳纪录片获奖作品”）；
+        “最佳X大奖获奖”同理去掉“大奖”（IDFA最佳长纪录片大奖获奖作品）；
+        “最优秀作品奖获奖”同理（韩国青龙剧集奖最优秀作品奖获奖作品）；
+        不影响“金贝壳奖获奖作品”这类奖项名本身以“奖”结尾的形式。
+        “纽约影评人协会奖”按基准惯例不保留“奖”字（与“金马最佳”同风格；
+        注意“美国国家影评人协会奖”仍保留“奖”，二者不共用此规则）。
+        """
+        award_text = re.sub(r'((?:最佳|最优秀)[^，。\s]{0,8}?)大?奖(获奖|提名)', r'\1\2', award_text)
+        award_text = award_text.replace('纽约影评人协会奖', '纽约影评人协会')
+        return award_text
+
+    @staticmethod
+    def _append_award(found_awards: List[Tuple[int, str]], pos: int, award_text: str) -> None:
+        """合并奖项（原地修改）：与已有奖项互为子串时保留信息更全的一个，
+        位置取其文本在正文中的起始偏移，用于最终按正文顺序排列。"""
+        if not any(
+            award_text in existing and award_text != existing
+            for _, existing in found_awards
+        ):
+            found_awards[:] = [
+                (p, existing) for p, existing in found_awards if existing not in award_text
+            ]
+            found_awards.append((pos, award_text))
+
     # 多人名单行内不应出现的词：角色词、奖项词、类型词、语言字幕词等
     _PERSON_LINE_BLOCK_KEYWORDS = (
         '主演', '出演', '导演', '执导', '编剧', '监制', '制片', '出品', '改编',
@@ -91,6 +121,39 @@ class MovieExtractor:
         '电影', '剧集', '纪录', '动画', '短片', '语', '字', '幕', '集', '季',
         '《', '》', '推荐', '最新', '已出', '见平', '版', '高清',
     )
+
+    # 通用语言兜底的片段黑名单：含这些词的片段是角色/奖项/类别描述而非语言
+    _LANG_WORD_BLOCKLIST = (
+        '主演', '导演', '编剧', '监制', '出演', '推荐', '豆瓣', '奖',
+        '字幕', '中字', '双字', '电影', '剧集', '纪录', '动画', '作品',
+        '提名', '获奖', '入围', '展映', '高分', '热门', '冷门',
+        '季', '集', '版', '片', '外语', '物语', '谜语',
+    )
+
+    def _resolve_generic_language(self, word: str) -> Optional[str]:
+        """通用语言判定（枚举表未命中时的兜底）：
+        字幕词前最后一个词以“语”结尾、由 1–6 字词根经“/、”连接而成的短片段
+        视为语言组合，照抄原文去分隔符返回（如“契维语”“缅/泰语”→“缅泰语”）；
+        含角色/奖项/类别词的片段不是语言，返回 None。
+        """
+        if not word:
+            return None
+        word = word.rstrip('。，、：:；;！？!?')
+        if word.startswith('已出'):
+            # “已出X语中字”的“已出”是状态词（字幕已出），不属于语言名
+            word = word[2:]
+        if any(kw in word for kw in self._LANG_WORD_BLOCKLIST):
+            return None
+        parts = [p for p in re.split(r'[/、]+', word) if p]
+        if not parts or len(parts[-1]) < 2 or not parts[-1].endswith('语'):
+            return None
+        for p in parts:
+            if not 1 <= len(p) <= 6 or not re.fullmatch(r'[A-Za-z0-9一-鿿]+', p):
+                return None
+        joined = ''.join(parts)
+        if not 2 <= len(joined) <= 12:
+            return None
+        return joined
 
     def _merge_unlabeled_person_lines(self, text: str) -> str:
         """把折行的多人名单与下一行合并。
@@ -497,7 +560,7 @@ class MovieExtractor:
             if any(
                 kw in credit
                 for kw in (
-                    '导演', '执导', '编剧', '主演', '自导', '自编',
+                    '导演', '执导', '编剧', '主演', '自导', '自编', '监制',
                     '获奖', '提名', '入围', '展映', '奖', '出品', '改编',
                     '电影', '剧集', '纪录', '动画', '短片', '遗作', '首作',
                 )
@@ -526,34 +589,93 @@ class MovieExtractor:
             info.version_credit = m.group(0)
             break
 
-        # 提取获奖情况
-        found_awards = []
+        # 提取获奖情况（各项记录其在正文中的位置，最终按正文顺序排列，
+        # 与基准一致——如罗斯：银熊奖最佳主角奖在前、金熊奖提名在后）
+        found_awards: List[Tuple[int, str]] = []
         for pattern in self.awards_patterns:
             match = re.search(pattern, text)
             if match:
-                award_text = match.group(1)
-                # “最佳X奖获奖/提名”中“奖”与“获奖/提名”语义重复，按惯例去掉
-                # （如“柏林电影节最佳纪录片奖获奖作品”→“柏林电影节最佳纪录片获奖作品”）；
-                # “最佳X大奖获奖”同理去掉“大奖”（IDFA最佳长纪录片大奖获奖作品）；
-                # “最优秀作品奖获奖”同理（韩国青龙剧集奖最优秀作品奖获奖作品）；
-                # 不影响“金贝壳奖获奖作品”这类奖项名本身以“奖”结尾的形式
-                award_text = re.sub(r'((?:最佳|最优秀)[^，。\s]{0,8}?)大?奖(获奖|提名)', r'\1\2', award_text)
-                # “纽约影评人协会奖”按基准惯例不保留“奖”字（与“金马最佳”同风格；
-                # 注意“美国国家影评人协会奖”仍保留“奖”，二者不共用此规则）
-                award_text = award_text.replace('纽约影评人协会奖', '纽约影评人协会')
-                if not any(
-                    award_text in existing and award_text != existing
-                    for existing in found_awards
-                ):
-                    found_awards = [
-                        existing for existing in found_awards if existing not in award_text
-                    ]
-                    found_awards.append(award_text)
-        if found_awards:
-            info.awards = ' '.join(found_awards)
+                self._append_award(
+                    found_awards, match.start(1),
+                    self._normalize_award_text(match.group(1)),
+                )
 
-        # 提取改编信息
-        adaptation_match = re.search(r'(改编自[^《》]{0,20}《[^》]+》)', text)
+        # “X获YY奖…作品”：获奖者即影片主演（罗斯：
+        # “桑德拉·惠勒获柏林电影节银熊奖最佳主角奖作品”
+        # → 主演“桑德拉·惠勒” + 奖项“柏林电影节银熊奖最佳主角奖”）；
+        # “获奖”类泛用描述（无具体奖项名）不适用
+        person_block = INVALID_CAST_KEYWORDS + [
+            '获', '奖', '提名', '作品', '推荐', '本片', '该片', '语', '字',
+            '季', '集', '改编自',
+        ]
+        for m in re.finditer(
+            r'([^《》\n\s，。：:]{2,15}?)获([^《》\n\s，。：:]{2,30}?奖)(?:作品)?(?=\s|$)',
+            text,
+        ):
+            person, award_part = m.group(1), m.group(2)
+            if '/' in person or '、' in person:
+                continue
+            if any(kw in person for kw in person_block):
+                continue
+            if person not in info.cast:
+                info.cast.append(person)
+                if info.cast_pos is None:
+                    info.cast_pos = m.start(1)
+            self._append_award(
+                found_awards, m.start(2), self._normalize_award_text(award_part)
+            )
+
+        # “X+电影节+封后/封帝作”：封后/封帝者即影片主演（伊莎朵拉：
+        # “瓦妮莎·雷德格雷夫戛纳电影节封后作”→ 主演“瓦妮莎·雷德格雷夫”
+        # + 奖项“戛纳电影节封后之作”，按基准补“之”字）；
+        # 人名须从行首/空白后开始，奖项段不含“·”（避免把人名拆进奖项）
+        for m in re.finditer(
+            r'(?<![^\s\n])([^《》\n\s，。：:]{2,15})'
+            r'([^《》\n\s，。：:·]{2,20}?(?:奖|电影节|电影展|影展|电视节))'
+            r'(封后|封帝)之?作品?(?=\s|$)',
+            text,
+        ):
+            person, festival, crown = m.group(1), m.group(2), m.group(3)
+            if '/' in person or '、' in person:
+                continue
+            if any(kw in person for kw in person_block):
+                continue
+            if person not in info.cast:
+                info.cast.append(person)
+                if info.cast_pos is None:
+                    info.cast_pos = m.start(1)
+            self._append_award(
+                found_awards, m.start(2),
+                self._normalize_award_text(festival + crown + '之作'),
+            )
+
+        # 通用奖项兜底：具体模式之外的“名称+奖/节展+…+提名/获奖/入围/展映”形态片段，
+        # 按空白/标点/书名号切片后整段匹配，命中则照抄原文搬入（同样只做机械去重清理）；
+        # 已被具体模式捕获的原文跳过，避免打乱既有奖项顺序
+        for cm in re.finditer(r'[^\s《》「」()（）【】\[\]，,。；;：:!?！？]+', text):
+            chunk = cm.group(0)
+            if not chunk or len(chunk) > 40:
+                continue
+            m = re.fullmatch(GENERIC_AWARD_PATTERN, chunk)
+            if not m:
+                continue
+            if any(kw in m.group('name') for kw in GENERIC_AWARD_NAME_BLOCKLIST):
+                continue
+            award_text = self._normalize_award_text(chunk)
+            if any(award_text == existing for _, existing in found_awards):
+                continue
+            self._append_award(found_awards, cm.start(), award_text)
+
+        if found_awards:
+            found_awards.sort(key=lambda item: item[0])
+            info.awards = ' '.join(text for _, text in found_awards)
+
+        # 提取改编信息（《爱丽丝》：多部原著以 &/＆/、连接时整体保留，
+        # 如“改编自原著《爱丽丝梦游仙境》&《镜中世界》”）
+        adaptation_match = re.search(
+            r'(改编自[^《》]{0,20}《[^》]+》(?:\s*(?:&amp;|&|＆|、)\s*《[^》]+》){0,3})',
+            text,
+        )
         if not adaptation_match:
             adaptation_match = re.search(
                 r'(改编自[^《》\n]{0,30}?(?:原著(?:小说)?|小说|漫画|游戏|叙事诗)(?:\s*\d{4}版)?)',
@@ -561,6 +683,8 @@ class MovieExtractor:
             )
         if adaptation_match:
             adaptation_text = adaptation_match.group(1).replace('\n', ' ').strip()
+            # 网页转义实体还原（“《A》&amp;《B》”→“《A》&《B》”）
+            adaptation_text = adaptation_text.replace('&amp;', '&')
             # 缩写点号后的空格并回名字（“改编自J.D. 万斯同名热门原著”→“J.D.万斯同名…”），
             # 避免文件名组装时改编段被空格拆开、剩余部分误排到奖项位
             adaptation_text = re.sub(r'([A-Za-z]\.)\s+', r'\1', adaptation_text)
@@ -642,6 +766,16 @@ class MovieExtractor:
                         info.subtitle = sub_pat
                         lang_matched = True
 
+                if not lang_matched and ('/' in last_word or '、' in last_word):
+                    # 斜杠/顿号组合含枚举表外的新词根时（如“缅/泰语”），
+                    # 整词形似语言则照抄去分隔符，优先于只匹配到尾部的枚举结果
+                    word = before.split()[-1] if before.split() else ''
+                    resolved = self._resolve_generic_language(word)
+                    if resolved:
+                        info.language = resolved
+                        info.subtitle = sub_pat
+                        lang_matched = True
+
                 if not lang_matched:
                     found_langs = []
                     temp = before
@@ -661,6 +795,16 @@ class MovieExtractor:
                             break
                     if found_langs:
                         info.language = ''.join(reversed(found_langs))
+                        info.subtitle = sub_pat
+                        lang_matched = True
+
+                if not lang_matched:
+                    # 通用语言兜底：枚举表完全未命中时，字幕词前最后一个词
+                    # 若以“语”结尾且形似语言组合，照抄原文去分隔符作为语言
+                    word = before.split()[-1] if before.split() else ''
+                    resolved = self._resolve_generic_language(word)
+                    if resolved:
+                        info.language = resolved
                         info.subtitle = sub_pat
                         lang_matched = True
 
@@ -701,9 +845,14 @@ class MovieExtractor:
                 except ValueError:
                     pass
 
-        # 集数后缀标注（女子警察的逆袭：“全9集+SP”的“+SP”特别篇），随集数一起显示
-        if re.search(r'全[0-9一二两三四五六七八九十]+集\+SP(?![A-Za-z])', text):
-            info.episodes_extra = '+SP'
+        # 集数后缀标注（女子警察的逆袭：“全9集+SP”的“+SP”特别篇；
+        # 荒凉百宝店：“全3集➕圣诞篇”的“➕圣诞篇”，加号统一为半角），随集数一起显示
+        ep_extra = re.search(
+            r'全[0-9一二两三四五六七八九十]+集(?:\+|➕)(SP(?![A-Za-z])|[^\s，。]{1,6})',
+            text,
+        )
+        if ep_extra:
+            info.episodes_extra = '+' + ep_extra.group(1)
 
         # 综艺“期”数（如“全13期”），保留“期”单位存入季集段
         qi_match = re.search(r'全([0-9一二两三四五六七八九十]+)期', text)

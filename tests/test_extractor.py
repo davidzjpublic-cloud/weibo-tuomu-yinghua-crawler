@@ -2348,6 +2348,148 @@ class TestBatch0908Alignment:
         filename = info.generate_filename()
         assert "高分剧集 全9集+SP 日语中日双字" in filename
 
+    def test_bafta_miniseries_nomination(self):
+        # 漫长的阴影：“英国电影学院奖最佳迷你剧提名作品”整体提取
+        info = self._extract("《漫长的阴影》\n英国电影学院奖最佳迷你剧提名作品\n冷门高分犯罪剧集推荐\n全7集 英语中英双字\n见平👇")
+        assert info.awards == "英国电影学院奖最佳迷你剧提名作品"
+        filename = info.generate_filename()
+        assert "英国电影学院奖最佳迷你剧提名作品 冷门高分犯罪剧集 全7集" in filename
+
+    def test_episodes_christmas_special_suffix(self):
+        # 荒凉百宝店：“全3集➕圣诞篇”的“➕圣诞篇”后缀随集数显示，加号统一为半角
+        info = self._extract("《荒凉百宝店》\n冷门高分喜剧剧集推荐\n全3集➕圣诞篇 英语中英双字\n见平👇")
+        assert info.episodes == 3
+        assert info.episodes_extra == "+圣诞篇"
+        filename = info.generate_filename()
+        assert "冷门高分喜剧剧集 全3集+圣诞篇 英语中英双字" in filename
+
+    def test_satellite_award_tv_movie_nomination(self):
+        # 平凡岁月的魅力：“金卫星奖最佳电视电影提名作品”整体提取
+        info = self._extract("《平凡岁月的魅力》\n凯丽·拉塞尔/斯基特·乌尔里奇主演高分爱情电影\n金卫星奖最佳电视电影提名作品\n英语中英双字\n见平👇")
+        assert info.awards == "金卫星奖最佳电视电影提名作品"
+        filename = info.generate_filename()
+        assert "主演 金卫星奖最佳电视电影提名作品 高分爱情片" in filename
+
+    def test_blue_dragon_award_without_prefix(self):
+        # 塑料大棚：原文省略“韩国电影”前缀的“青龙奖最佳女主角提名作品”同样提取
+        info = self._extract("《塑料大棚》\n青龙奖最佳女主角提名作品\n金瑞亨主演惊悚犯罪片\n韩语中字\n见平👇")
+        assert info.awards == "青龙奖最佳女主角提名作品"
+        filename = info.generate_filename()
+        assert "青龙奖最佳女主角提名作品 惊悚犯罪片" in filename
+
+    def test_supervisor_work_credit_not_duplicated(self):
+        # 恐怖星球：“昆汀·塔伦蒂诺监制作品”已提取为监制署名，不再重复显示“监制作品”
+        info = self._extract("《恐怖星球》\n罗伯特·罗德里格兹导演作品\n昆汀·塔伦蒂诺监制作品\n英语中英双字\n见平👇")
+        assert info.supervisor == "昆汀·塔伦蒂诺"
+        assert info.work_credit is None
+        filename = info.generate_filename()
+        assert "罗伯特·罗德里格兹导演 昆汀·塔伦蒂诺监制 英语中英双字" in filename
+
+    def test_cesar_award_without_prefix(self):
+        # 小农夫：原文省略“法国”的“凯撒奖最佳影片提名作品”同样提取
+        info = self._extract("《小农夫》\n凯撒奖最佳影片提名作品\n斯万·阿劳德主演电影\n法语中英双字\n见平👇")
+        assert info.awards == "凯撒奖最佳影片提名作品"
+        filename = info.generate_filename()
+        assert "主演 凯撒奖最佳影片提名作品" in filename
+
+    def test_japan_academy_award_best_actress(self):
+        # 梦千代日记：日本电影学院奖最佳女主角提名作品
+        info = self._extract("《梦千代日记》\n日本电影学院奖最佳女主角提名作品\n吉永小百合主演电影\n日语中字\n见平👇")
+        assert info.awards == "日本电影学院奖最佳女主角提名作品"
+        filename = info.generate_filename()
+        assert "主演 日本电影学院奖最佳女主角提名作品" in filename
+
+    def test_goya_award_new_actor_without_prefix(self):
+        # 中国女孩：原文省略“西班牙”的“戈雅奖最佳新人演员提名作品”同样提取
+        info = self._extract("《中国女孩》\n戈雅奖最佳新人演员提名作品\n西班牙/国语中西双字\n见平👇")
+        assert info.awards == "戈雅奖最佳新人演员提名作品"
+        filename = info.generate_filename()
+        assert "戈雅奖最佳新人演员提名作品 西班牙国语中西双字" in filename
+
+    def test_generic_award_fallback_unknown_body(self):
+        # 通用奖项兜底：未枚举的奖项主体（金熊猫奖）按形态识别，原文照抄
+        info = self._extract("《测试片》\n金熊猫奖最佳影片提名作品\n冷门高分片\n英语中字\n见平👇")
+        assert info.awards == "金熊猫奖最佳影片提名作品"
+
+    def test_generic_award_fallback_cleanup(self):
+        # 通用兜底同样只做“奖获奖”机械去重
+        info = self._extract("《测试片》\n金熊猫奖最佳纪录片奖获奖作品\n英语中字\n见平👇")
+        assert info.awards == "金熊猫奖最佳纪录片获奖作品"
+
+    def test_generic_award_fallback_rejects_non_award(self):
+        # “获奖”类描述语没有奖项主体与动作结尾，不误判为奖项
+        info = self._extract("《测试片》\n冷门高分获奖佳作推荐\n英语中字\n见平👇")
+        assert info.awards is None
+
+    def test_generic_award_keeps_specific_order(self):
+        # 具体模式已捕获的奖项不重复添加、不改变顺序
+        info = self._extract("《测试片》\n戛纳电影节金棕榈奖提名作品\n英语中字\n见平👇")
+        assert info.awards == "戛纳电影节金棕榈奖提名作品"
+
+    def test_generic_language_fallback_new_language(self):
+        # 通用语言兜底：枚举表之外的新语言（契维语）照抄原文
+        info = self._extract("《测试片》\n冷门剧情片\n契维语中字\n见平👇")
+        assert info.language == "契维语"
+        assert info.subtitle == "中字"
+
+    def test_generic_language_fallback_slash_new_root(self):
+        # 斜杠组合含未枚举词根（缅/泰语）时整词照抄去斜杠，而不是只匹配尾部
+        info = self._extract("《测试片》\n冷门剧情片\n缅/泰语中字\n见平👇")
+        assert info.language == "缅泰语"
+        assert info.subtitle == "中字"
+
+    def test_generic_language_fallback_rejects_non_language(self):
+        # “导演寄语”这类以“语”结尾的非语言词不误判为语言
+        info = self._extract("《测试片》\n导演寄语\n中字\n见平👇")
+        assert info.language is None
+        assert info.subtitle == "中字"
+
+    def test_recipient_award_person_as_cast(self):
+        # 罗斯：“桑德拉·惠勒获柏林电影节银熊奖最佳主角奖作品”
+        # → 获奖者提取为主演，奖项保留“最佳主角奖”全称；
+        # 多个奖项按正文顺序排列（银熊在前、金熊在后）
+        info = self._extract(
+            "《罗斯》\n桑德拉·惠勒获柏林电影节银熊奖最佳主角奖作品\n"
+            "柏林电影节金熊奖提名作品\n已出德语中字\n见平👇"
+        )
+        assert info.cast == ["桑德拉·惠勒"]
+        assert info.awards == "柏林电影节银熊奖最佳主角奖 柏林电影节金熊奖提名作品"
+        filename = info.generate_filename()
+        assert "桑德拉·惠勒主演 柏林电影节银熊奖最佳主角奖 柏林电影节金熊奖提名作品 德语中字" in filename
+
+    def test_adaptation_multiple_works(self):
+        # 爱丽丝：多部原著以 & 连接时整体保留，&amp; 实体还原为 &
+        info = self._extract(
+            "《爱丽丝》\n改编自原著《爱丽丝梦游仙境》&amp;《镜中世界》\n"
+            "全两集 英语中字\n见平👇"
+        )
+        assert info.awards == "改编自原著《爱丽丝梦游仙境》&《镜中世界》"
+        filename = info.generate_filename()
+        assert "改编自原著《爱丽丝梦游仙境》&《镜中世界》 全2集" in filename
+
+    def test_crowning_work_person_as_cast(self):
+        # 伊莎朵拉：“瓦妮莎·雷德格雷夫戛纳电影节封后作”
+        # → 封后者提取为主演，奖项按基准补“之”字为“戛纳电影节封后之作”
+        info = self._extract(
+            "《伊莎朵拉》\n瓦妮莎·雷德格雷夫戛纳电影节封后作\n英语中英双字\n见平👇"
+        )
+        assert info.cast == ["瓦妮莎·雷德格雷夫"]
+        assert info.awards == "戛纳电影节封后之作"
+        filename = info.generate_filename()
+        assert "瓦妮莎·雷德格雷夫主演 戛纳电影节封后之作 英语中英双字" in filename
+
+    def test_foreign_latin_season_suffix_dropped(self):
+        # 占领区：拉丁字母季数词后缀（Sesong 1）在全季打包时整体去除
+        info = MovieInfo(
+            chinese_name="占领区",
+            foreign_name="Okkupert Sesong 1",
+            season=3,
+            season_raw="全3",
+            raw_text="《占领区》\n冷门高分惊悚剧集推荐\n全三季 挪威/俄/英语中英双字",
+        )
+        filename = info.generate_filename()
+        assert filename.startswith("占领区 Okkupert 1-3季 （")
+
     def test_yi_e_ying_language(self):
         # 我是爱：原文“意/恶/英语”的“恶”为干扰字，按基准取“意英语”
         info = self._extract("《我是爱》\n威尼斯电影节地平线单元奖最佳影片提名作品\n蒂尔达·斯文顿主演高分电影\n意/恶/英语中英双字\n见平👇")
