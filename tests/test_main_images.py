@@ -140,6 +140,48 @@ class TestRetryFailedImages:
         assert len(lobster._load_failed_images()) == 1
 
 
+class TestSaveToQuarkImageTarget:
+    """微博配图目标文件夹定位：最终名含半角“/”时，落盘名是全角“／”变体。"""
+
+    def test_poster_goes_into_fullwidth_slash_folder(self, tmp_path):
+        lobster, crawler = make_lobster(tmp_path)
+        final_name = (
+            "911：总统作战室 9/11：Inside the President’s War Room 2021 "
+            "（高分纪录片 英语中字 豆瓣8.1）"
+        )
+        movie = MagicMock()
+        movie.quark_fid = "share_fid"
+        movie.chinese_name = "911：总统作战室"
+        movie.quark_file_name = "911总统作战室2021"
+        movie.generate_filename.return_value = final_name
+
+        client = crawler.quark_client
+        client.find_or_create_dir.return_value = "root_fid"
+        # 夸克落盘名把半角“/”换成全角“／”，定位子文件夹时须同时匹配
+        disk_name = final_name.replace("/", "／")
+        client.list_all_my_files.side_effect = [
+            [],  # 冲突检查：无同名项
+            [{"fid": "folder_fid", "file_name": disk_name, "file_type": 0}],
+        ]
+        client.save_and_rename.return_value = [{"renamed": True}]
+        lobster._upload_image_with_retry = MagicMock(return_value="img_fid")
+
+        ok = lobster._save_to_quark(
+            "https://pan.quark.cn/s/abc",
+            [movie],
+            "5341934461913089",
+            ["https://wx3.sinaimg.cn/large/abc.jpg"],
+        )
+
+        assert ok is True
+        # 配图应上传到全角“／”名的子文件夹，而不是根目录 root_fid
+        lobster._upload_image_with_retry.assert_called_once_with(
+            "https://wx3.sinaimg.cn/large/abc.jpg",
+            "5341934461913089_img_1.jpg",
+            "folder_fid",
+        )
+
+
 class TestUploadImageWithRetry:
 
     def test_success_returns_fid(self, tmp_path):

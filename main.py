@@ -508,7 +508,14 @@ class Lobster:
 
         # 上传微博配图到被转存的文件夹内（如果分享被保存为子文件夹）
         if image_name:
-            final_names = {html.unescape(item["final_name"]) for item in items}
+            final_names = set()
+            for item in items:
+                name = html.unescape(item["final_name"])
+                final_names.add(name)
+                # 夸克不接受半角“/”，落盘名是替换成全角“／”的变体
+                # （如“9/11”→“9／11”），查找子文件夹时一并纳入，否则
+                # 配图会因找不到同名子文件夹而误传到根目录
+                final_names.add(name.replace("/", "／"))
             image_target_fid = target_fid
             image_target_name = None
             for child in client.list_all_my_files(target_fid, size=100):
