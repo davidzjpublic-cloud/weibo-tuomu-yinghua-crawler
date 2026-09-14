@@ -359,14 +359,21 @@ class MovieExtractor:
             best_director = None
             best_director_pos = None
             for i, cand in enumerate(director_candidates):
-                if (
-                    len(cand) < 15
-                    and not any(kw in cand for kw in INVALID_DIRECTOR_KEYWORDS)
-                    and not cand.isdigit()
-                ):
-                    if best_director is None or len(cand) > len(best_director):
-                        best_director = cand
-                        best_director_pos = director_positions[i]
+                # 斜杠/顿号分隔的联合导演（唯一的家园：
+                # “拉谢尔·瑟尔/尤瓦尔·亚伯拉罕导演作品”）逐段校验后以“、”连接；
+                # 单名维持原有整体校验
+                if '/' in cand or '、' in cand:
+                    parts = [p.strip() for p in re.split(r'[/、]', cand) if p.strip()]
+                    if not parts or not all(
+                        self._is_valid_role_name(p, "director") for p in parts
+                    ):
+                        continue
+                    cand = '、'.join(parts)
+                elif not self._is_valid_role_name(cand, "director"):
+                    continue
+                if best_director is None or len(cand) > len(best_director):
+                    best_director = cand
+                    best_director_pos = director_positions[i]
             if best_director:
                 info.director = best_director
                 info.director_pos = best_director_pos

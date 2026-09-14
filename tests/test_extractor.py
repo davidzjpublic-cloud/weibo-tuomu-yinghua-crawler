@@ -2490,6 +2490,27 @@ class TestBatch0908Alignment:
         filename = info.generate_filename()
         assert filename.startswith("占领区 Okkupert 1-3季 （")
 
+    def test_co_directors_slash_separated(self):
+        # 唯一的家园：斜杠分隔的联合导演逐段校验后以“、”连接
+        # （整体 15 字超长不应杀死候选人）
+        info = self._extract(
+            "《唯一的家园》\n拉谢尔·瑟尔/尤瓦尔·亚伯拉罕导演作品\n"
+            "奥斯卡最佳纪录长片获奖作品\n阿拉伯/希伯来/英语中字\n见平👇"
+        )
+        assert info.director == "拉谢尔·瑟尔、尤瓦尔·亚伯拉罕"
+        filename = info.generate_filename()
+        assert "拉谢尔·瑟尔、尤瓦尔·亚伯拉罕导演 奥斯卡最佳纪录长片获奖作品" in filename
+
+    def test_kinema_junpo_top10_without_prefix(self):
+        # 卖梦的两人：“旬报2012年度十佳日影”省略“电影”前缀同样提取
+        info = self._extract(
+            "《卖梦的两人》\n松隆子/阿部贞夫主演犯罪电影\n旬报2012年度十佳日影\n"
+            "日语中日双字\n见平👇"
+        )
+        assert info.awards == "旬报2012年度十佳日影"
+        filename = info.generate_filename()
+        assert "松隆子、阿部贞夫主演 旬报2012年度十佳日影 犯罪片" in filename
+
     def test_yi_e_ying_language(self):
         # 我是爱：原文“意/恶/英语”的“恶”为干扰字，按基准取“意英语”
         info = self._extract("《我是爱》\n威尼斯电影节地平线单元奖最佳影片提名作品\n蒂尔达·斯文顿主演高分电影\n意/恶/英语中英双字\n见平👇")

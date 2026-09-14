@@ -12,6 +12,20 @@ from config import CHINESE_NUMBERS, FILENAME_INVALID_CAST_KEYWORDS, INVALID_DIRE
 from utils import safe_filename
 
 
+def _is_valid_person_name(name: str, invalid_keywords) -> bool:
+    """校验人名是否可入文件名。支持“、/”连接的联合署名
+    （如联合导演“拉谢尔·瑟尔、尤瓦尔·亚伯拉罕”）——逐段校验，
+    段长、黑名单、纯数字检查作用于每个人名段而非整体字符串。
+    """
+    parts = [p for p in re.split(r'[/、]', name.strip()) if p]
+    return bool(parts) and all(
+        len(p) < 15
+        and not any(kw in p for kw in invalid_keywords)
+        and not p.isdigit()
+        for p in parts
+    )
+
+
 @dataclass
 class MovieInfo:
     """影视信息数据类。"""
@@ -140,9 +154,7 @@ class MovieInfo:
             director_clean = self.director.strip()
             is_valid = (
                 director_clean
-                and len(director_clean) < 15
-                and not any(kw in director_clean for kw in INVALID_DIRECTOR_KEYWORDS)
-                and not director_clean.isdigit()
+                and _is_valid_person_name(director_clean, INVALID_DIRECTOR_KEYWORDS)
                 and not re.search(r'全\d+集|第\d+季', director_clean)
             )
             if is_valid:
@@ -153,9 +165,7 @@ class MovieInfo:
             supervisor_clean = self.supervisor.strip()
             is_valid = (
                 supervisor_clean
-                and len(supervisor_clean) < 15
-                and not any(kw in supervisor_clean for kw in INVALID_DIRECTOR_KEYWORDS)
-                and not supervisor_clean.isdigit()
+                and _is_valid_person_name(supervisor_clean, INVALID_DIRECTOR_KEYWORDS)
                 and not re.search(r'全\d+集|第\d+季', supervisor_clean)
             )
             if is_valid:
@@ -166,9 +176,7 @@ class MovieInfo:
             writer_clean = self.writer.strip()
             is_valid = (
                 writer_clean
-                and len(writer_clean) < 15
-                and not any(kw in writer_clean for kw in INVALID_WRITER_KEYWORDS)
-                and not writer_clean.isdigit()
+                and _is_valid_person_name(writer_clean, INVALID_WRITER_KEYWORDS)
             )
             if is_valid:
                 pos = self.writer_pos if self.writer_pos is not None else 9999
