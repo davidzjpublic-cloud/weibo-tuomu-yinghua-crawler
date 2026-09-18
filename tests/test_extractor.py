@@ -206,6 +206,89 @@ class TestMovieExtractor:
         assert info.cast == ["新珠三千代"]
         assert info.awards == "日本新浪潮电影作品"
 
+    def test_extract_iceland_new_wave_work(self, extractor):
+        # 回归：国别+类别中段的“冰岛新浪潮运动电影作品”整词保留，
+        # 类别“运动”与奖项重复被抑制（白色，白色的一天）
+        info = extractor.extract(
+            "《白色，白色的一天》\n戛纳电影节影评人周单元新星奖获奖作品\n"
+            "冰岛新浪潮运动电影作品\n冰岛语中字",
+            "5344137130017671",
+            "2026-09-18",
+        )
+        assert info is not None
+        assert info.awards == "戛纳电影节影评人周单元新星奖获奖作品 冰岛新浪潮运动电影作品"
+        assert info.category is None
+        filename = info.generate_filename()
+        assert "戛纳电影节影评人周单元新星奖获奖作品 冰岛新浪潮运动电影作品 冰岛语中字" in filename
+
+    def test_extract_kinema_junpo_top10_no_year(self, extractor):
+        # 回归：无“奖”字无年份的“电影旬报十佳日影之一”整词保留（常磐庄的青春）
+        info = extractor.extract(
+            "《常磐庄的青春》\n电影旬报十佳日影之一\n日语中字",
+            "5344222739956666",
+            "2026-09-18",
+        )
+        assert info is not None
+        assert info.awards == "电影旬报十佳日影之一"
+        filename = info.generate_filename()
+        assert "电影旬报十佳日影之一 日语中字" in filename
+
+    def test_extract_person_prefixed_biopic_category(self, extractor):
+        # 回归：“弗兰茨·卡夫卡传记电影”整体作为类别，显示为“弗兰茨·卡夫卡传记片”；
+        # 评级+类别组合“主演高分传记片”仍按原样提取（无异乡人回归）
+        info = extractor.extract(
+            "《弗兰茨》\n圣塞巴斯蒂安电影节金贝壳奖提名作品\n弗兰茨·卡夫卡传记电影\n中英双字",
+            "5344262117392411",
+            "2026-09-18",
+        )
+        assert info is not None
+        assert info.category == "弗兰茨·卡夫卡传记"
+        assert info.awards == "圣塞巴斯蒂安电影节金贝壳奖提名作品"
+        filename = info.generate_filename()
+        assert "圣塞巴斯蒂安电影节金贝壳奖提名作品 弗兰茨·卡夫卡传记片 中英双字" in filename
+
+        info2 = extractor.extract(
+            "《异乡人》\n主演高分传记片\n英语中字",
+            "991",
+            "2026-09-18",
+        )
+        assert info2.category == "传记"
+
+    def test_extract_youth_category(self, extractor):
+        # 回归：青春类别词（最佳舞伴：冷门青春喜剧电影推荐 → 冷门青春喜剧片）
+        info = extractor.extract(
+            "《最佳舞伴》\n最新冷门青春喜剧电影推荐\n已出英语中英双字",
+            "5344524742164931",
+            "2026-09-18",
+        )
+        assert info is not None
+        assert info.category == "青春/喜剧"
+        assert info.genre == "电影"
+        filename = info.generate_filename()
+        assert "冷门青春喜剧片 英语中英双字" in filename
+
+    def test_extract_animation_documentary_category(self, extractor):
+        # 回归：动画纪录片（AI启示录：冷门动画纪录片推荐 → 冷门动画纪录片），
+        # “动画”插到“纪录”前，其余位置的“动画”不误入类别
+        info = extractor.extract(
+            "《AI启示录》\n最新冷门动画纪录片推荐\n已出英语中英双字",
+            "5344455197721859",
+            "2026-09-18",
+        )
+        assert info is not None
+        assert info.category == "动画/纪录"
+        assert info.genre == "纪录片"
+        filename = info.generate_filename()
+        assert "冷门动画纪录片 英语中英双字" in filename
+
+        # “动画”与“纪录”不在一处连写时不插入（如动画剧集另述、纪录片单述）
+        info2 = extractor.extract(
+            "《测试片》\n冷门纪录片推荐 动画黄金时代\n英语中字",
+            "992",
+            "2026-09-18",
+        )
+        assert info2.category == "纪录"
+
     def test_extract_golden_horse_actress_award(self, extractor):
         # 回归：金马最佳女主角获奖作品（回光奏鸣曲）
         info = extractor.extract(
@@ -794,6 +877,30 @@ class TestMovieExtractor:
         assert info.subtitle == "中文字幕"
         filename = info.generate_filename()
         assert "全8集 中文字幕 豆瓣" in filename or "全8集 中文字幕" in filename
+
+    def test_extract_official_cn_subtitle_no_language(self, extractor):
+        # 回归：无语言词的“官方中字”整词提取，不再截成“中字”（娃娃）
+        info = extractor.extract(
+            "《娃娃》\n改编自博莱斯瓦夫·普鲁斯高分原著《玩偶》\n最新冷门剧集推荐\n全6集 官方中字",
+            "5343832490117524",
+            "2026-09-16",
+        )
+        assert info is not None
+        assert info.language is None
+        assert info.subtitle == "官方中字"
+        filename = info.generate_filename()
+        assert "全6集 官方中字" in filename
+
+    def test_extract_official_cn_subtitle_with_language(self, extractor):
+        # “波兰语官方中字”带语言词时，主循环按长字幕词整词提取
+        info = extractor.extract(
+            "《测试剧》\n冷门剧集推荐\n全6集 波兰语官方中字",
+            "5343832490117525",
+            "2026-09-16",
+        )
+        assert info is not None
+        assert info.language == "波兰语"
+        assert info.subtitle == "官方中字"
 
     def test_extract_musical_category(self, extractor):
         # 回归：“歌舞”作为类别词，顺序在喜剧之后（玛蒂尔达：音乐剧）
@@ -2415,6 +2522,17 @@ class TestBatch0908Alignment:
         # 通用兜底同样只做“奖获奖”机械去重
         info = self._extract("《测试片》\n金熊猫奖最佳纪录片奖获奖作品\n英语中字\n见平👇")
         assert info.awards == "金熊猫奖最佳纪录片获奖作品"
+
+    def test_generic_award_fallback_japanese_sho_suffix(self):
+        # 阿娴：日语系奖项名以“赏”结尾（报知映画赏），与具体模式的
+        # 日本电影学院奖并存时按正文顺序排列
+        info = self._extract(
+            "《阿娴》\n日本电影学院奖最佳影片提名作品\n报知映画赏最佳女主角获奖作品\n"
+            "市川昆执导 吉永小百合主演电影\n日语中字\n见平👇"
+        )
+        assert info.awards == "日本电影学院奖最佳影片提名作品 报知映画赏最佳女主角获奖作品"
+        filename = info.generate_filename()
+        assert "日本电影学院奖最佳影片提名作品 报知映画赏最佳女主角获奖作品 日语中字" in filename
 
     def test_generic_award_fallback_rejects_non_award(self):
         # “获奖”类描述语没有奖项主体与动作结尾，不误判为奖项

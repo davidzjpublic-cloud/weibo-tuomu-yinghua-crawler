@@ -510,11 +510,27 @@ class MovieExtractor:
         if last_guillemet_end != -1:
             text_after_title = text[last_guillemet_end + 1:]
 
+        # 人物传记类描述：“弗兰茨·卡夫卡传记电影/片”整体作为类别，
+        # 显示为“弗兰茨·卡夫卡传记片”；人名须含“·”且不含角色/评级词，
+        # 避免“主演高分传记片”这类评级+类别组合误挂人名前缀
+        biopic_match = re.search(
+            r'([^《》\n\s，。：:]{2,15}·[^《》\n\s，。：:]{1,15})传记(?:电影|片)',
+            text_after_title,
+        )
+        if biopic_match and any(
+            kw in biopic_match.group(1) for kw in INVALID_CAST_KEYWORDS
+        ):
+            biopic_match = None
+
         found_categories = []
         for cat in self.categories:
             if cat in text_after_title:
                 # 避免 genre="纪录片" 时 category 重复提取"纪录"
                 if info.genre == "纪录片" and cat == "纪录":
+                    continue
+                # 人物传记类：类别带上人名前缀
+                if cat == "传记" and biopic_match:
+                    found_categories.append(biopic_match.group(1) + "传记")
                     continue
                 found_categories.append(cat)
         if found_categories:
@@ -527,6 +543,14 @@ class MovieExtractor:
                 and "动画" not in found_categories
             ):
                 found_categories.insert(found_categories.index("短片"), "动画")
+            # “动画纪录片”同理（AI启示录：冷门动画纪录片推荐），插到“纪录”前；
+            # 以“动画纪录片”连写为条件，避免其他位置提及“动画”误入类别
+            if (
+                "纪录" in found_categories
+                and "动画纪录片" in text_after_title
+                and "动画" not in found_categories
+            ):
+                found_categories.insert(found_categories.index("纪录"), "动画")
             info.category = '/'.join(found_categories)
 
         # 提取“X相关”描述（如“哈利·波特相关高分纪录片”中的“哈利·波特相关”），
@@ -828,7 +852,7 @@ class MovieExtractor:
                 info.subtitle = lang_match.group(2)
             else:
                 fallback = re.search(
-                    r'(中英双语|中英双字|中文字幕|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字)',
+                    r'(中英双语|中英双字|中文字幕|官方中字|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字)',
                     text,
                 )
                 if fallback:
