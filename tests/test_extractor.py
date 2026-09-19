@@ -1615,6 +1615,18 @@ class TestMovieExtractor:
         filename = info.generate_filename()
         assert "（改编自同名叙事诗 艾玛·汤普森、艾伦·瑞克曼主演" in filename
 
+    def test_extract_adapted_from_drama(self, extractor):
+        # 回归：改编自亨利克·易卜生戏剧作品（海达）——改编尾词交替项含“作品”
+        info = extractor.extract(
+            "《海达》\n改编自亨利克·易卜生戏剧作品\n泰莎·汤普森主演电影\n英语中英双字\n见平👇",
+            "5344955463895882",
+            "2026-09-19",
+        )
+        assert info is not None
+        assert info.awards == "改编自亨利克·易卜生戏剧作品"
+        filename = info.generate_filename()
+        assert "（改编自亨利克·易卜生戏剧作品 泰莎·汤普森主演 英语中英双字" in filename
+
     def test_extract_gotham_award(self, extractor):
         # 回归：哥谭独立电影奖最佳纪录片提名作品（波士顿市政厅）——官方名无“节”，照抄原文
         info = extractor.extract(
