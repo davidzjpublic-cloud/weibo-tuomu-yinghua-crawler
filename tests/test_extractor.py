@@ -289,6 +289,28 @@ class TestMovieExtractor:
         )
         assert info2.category == "纪录"
 
+    def test_extract_art_documentary_series_category(self, extractor):
+        # 回归：艺术纪录剧集（设计天赋：冷门高分艺术纪录剧集推荐
+        # → 冷门高分艺术纪录剧集），“艺术”插到“纪录”前
+        info = extractor.extract(
+            "《设计天赋》\n冷门高分艺术纪录剧集推荐\n全5集 英语中英双字\n见平👇 ​ ​​​",
+            "5345332440602053",
+            "2026-09-20",
+        )
+        assert info is not None
+        assert info.category == "艺术/纪录"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "冷门高分艺术纪录剧集 全5集" in filename
+
+        # “艺术”与“纪录”不在一处连写时不插入（如艺术奖项另述、纪录剧集单述）
+        info2 = extractor.extract(
+            "《测试片》\n冷门纪录剧集推荐 百想艺术大赏获奖作品\n英语中字",
+            "993",
+            "2026-09-20",
+        )
+        assert info2.category == "纪录"
+
     def test_extract_golden_horse_actress_award(self, extractor):
         # 回归：金马最佳女主角获奖作品（回光奏鸣曲）
         info = extractor.extract(

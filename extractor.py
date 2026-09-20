@@ -551,6 +551,14 @@ class MovieExtractor:
                 and "动画" not in found_categories
             ):
                 found_categories.insert(found_categories.index("纪录"), "动画")
+            # “艺术纪录剧集”同理（设计天赋：冷门高分艺术纪录剧集推荐），插到“纪录”前；
+            # 以“艺术纪录”连写为条件，避免其他位置提及“艺术”误入类别
+            if (
+                "纪录" in found_categories
+                and "艺术纪录" in text_after_title
+                and "艺术" not in found_categories
+            ):
+                found_categories.insert(found_categories.index("纪录"), "艺术")
             info.category = '/'.join(found_categories)
 
         # 提取“X相关”描述（如“哈利·波特相关高分纪录片”中的“哈利·波特相关”），
