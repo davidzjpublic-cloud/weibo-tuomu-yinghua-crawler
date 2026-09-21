@@ -232,9 +232,11 @@ class MovieInfo:
                 season_chinese_nums = [
                     ch for ch, n in CHINESE_NUMBERS.items() if n == self.season
                 ]
-                # 仅当原文同时出现”全N季/全X季”等季节描述时才拆分，避免误拆《9号秘事》这类片名
-                indicators = [f'全{self.season}季']
+                # 仅当原文同时出现”全N季/全X季/前N季/前X季”等季节描述时才拆分，
+                # 避免误拆《9号秘事》这类片名
+                indicators = [f'全{self.season}季', f'前{self.season}季']
                 indicators.extend(f'全{ch}季' for ch in season_chinese_nums)
+                indicators.extend(f'前{ch}季' for ch in season_chinese_nums)
                 season_indicators_present = any(ind in self.raw_text for ind in indicators)
                 if season_indicators_present:
                     # 1) 末尾阿拉伯数字

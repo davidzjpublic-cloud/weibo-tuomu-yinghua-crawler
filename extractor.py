@@ -872,6 +872,11 @@ class MovieExtractor:
             if pure_match:
                 info.language = pure_match.group(1)
 
+        # 独立成行的“无对白”说明（疯神：无对白 单独一行，不连写类型词），
+        # 同样作为语言位置保留；“无对白+类型”连写仍由 genre 分支整体处理
+        if not info.language and re.search(r'无对白(?!(?:纪录片|短片|动画|纯享))', text):
+            info.language = '无对白'
+
         # 提取集数
         ep_match = re.search(self.patterns["episodes"], text)
         if ep_match:
@@ -914,8 +919,8 @@ class MovieExtractor:
             season_str = season_match.group(1)
             if season_str in self.chinese_numbers:
                 info.season = self.chinese_numbers[season_str]
-                # 只在"全"开头时替换为阿拉伯数字，"第"开头保留中文
-                if info.season_raw.startswith('全'):
+                # 只在"全/前"开头时替换为阿拉伯数字，"第"开头保留中文
+                if info.season_raw.startswith('全') or info.season_raw.startswith('前'):
                     info.season_raw = info.season_raw.replace(season_str, str(info.season))
             else:
                 try:

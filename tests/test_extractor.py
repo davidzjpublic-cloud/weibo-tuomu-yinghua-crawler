@@ -461,6 +461,27 @@ class TestMovieExtractor:
         assert "悬疑" not in info.cast
         assert "高分" not in info.director if info.director else True
 
+    def test_director_name_containing_ying_not_filtered(self, extractor):
+        # 回归：导演名含“英”（云雾仁左卫门：五社英雄导演作品）不应被
+        # “英”过滤误杀——语言/国家语境由“英语/英国/英剧”覆盖
+        info = extractor.extract(
+            "《云雾仁左卫门》\n仲代达矢/岩下志麻主演电影\n五社英雄导演作品\n日语中字\n见平👇 ​​​",
+            "5345332440602054",
+            "2026-09-21",
+        )
+        assert info is not None
+        assert info.director == "五社英雄"
+        filename = info.generate_filename()
+        assert "仲代达矢、岩下志麻主演 五社英雄导演 日语中字" in filename
+
+        # “英语/英国”等语言国家词仍被过滤，不进导演名
+        info2 = extractor.extract(
+            "《测试片》\n英语中字\n英国导演作品\n见平👇",
+            "994",
+            "2026-09-21",
+        )
+        assert info2.director is None
+
     def test_generate_filename_format(self, extractor, sample_movie_weibo):
         info = extractor.extract(
             sample_movie_weibo["text"],
@@ -630,6 +651,41 @@ class TestMovieExtractor:
         assert "切尔西侦探三季" not in filename
         assert "全3季" in filename
         assert "第3季" not in filename
+
+    def test_former_n_season_parsed_like_quan(self, extractor):
+        # 回归：“前两季”与“全两季”同样解析（行尸走肉：死亡之城
+        # → 标题 1-2季 + 括号 前2季）；“前N季+第X季”连写组合不受影响
+        info = extractor.extract(
+            "《行尸走肉:死亡之城》\n冷门惊悚恐怖剧集推荐\n前两季 英语中英双字\n见平👇",
+            "5345332440602055",
+            "2026-09-21",
+        )
+        assert info is not None
+        assert info.season == 2
+        assert info.season_raw == "前2"
+        filename = info.generate_filename()
+        assert "行尸走肉：死亡之城 1-2季" in filename
+        assert "前2季" in filename
+
+        # 阿拉伯数字“前4季”同样支持
+        info2 = extractor.extract(
+            "《测试剧》\n冷门悬疑剧集推荐\n前2季 英语中字\n见平👇",
+            "995",
+            "2026-09-21",
+        )
+        assert info2.season == 2
+        assert info2.season_raw == "前2"
+        assert "1-2季" in info2.generate_filename()
+
+        # “前4季+第五季夏篇”组合：季数仍取第五季，季数额外信息不重复拆标题
+        info3 = extractor.extract(
+            "《晚酌的流派》\n栗山千明主演美食剧集\n前4季+第五季夏篇全10集 日语中字\n见平👇",
+            "5339999000000001",
+            "2026-09-05",
+        )
+        assert info3.season == 5
+        assert info3.season_extra == "前4季+第五季夏篇"
+        assert "晚酌的流派 1-4季" not in info3.generate_filename()
 
     def test_english_spanish_language_extracted(self, extractor):
         """英/西语应正确识别为英西语。"""
@@ -973,6 +1029,20 @@ class TestMovieExtractor:
         assert info.language == "无对白纯享"
         filename = info.generate_filename()
         assert "高分风光纪录片 无对白纯享" in filename
+
+    def test_wordless_standalone_line_as_language(self, extractor):
+        # 回归：独立成行的“无对白”（疯神），走语言位置；
+        # “无对白+类型”连写仍由 genre 分支整体处理
+        info = extractor.extract(
+            "《疯神》\n芝加哥影评人协会奖最佳动画片提名作品\n高分恐怖动画推荐\n无对白\n见平👇 ​​​",
+            "5345332440602056",
+            "2026-09-21",
+        )
+        assert info is not None
+        assert info.genre == "动画"
+        assert info.language == "无对白"
+        filename = info.generate_filename()
+        assert "高分恐怖动画 无对白" in filename
 
     def test_extract_czech_film_history_honor(self, extractor):
         # 回归：捷克影史第一佳片描述性荣誉（玛婕妲·拉扎洛娃）
