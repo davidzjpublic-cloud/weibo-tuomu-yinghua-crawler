@@ -341,10 +341,13 @@ class MovieExtractor:
         if not info.director:
             director_candidates = []
             director_positions = []
-            # “导演”与“剧集作品”等类型词之间可夹类型形容（如“三宅唱导演恐怖剧集作品”）
+            # “导演”与“剧集作品”等类型词之间可夹类型形容（如“三宅唱导演恐怖剧集作品”）；
+            # 上限 35 字符容纳斜杠分隔的多人名单（雕像也会死亡：
+            # “阿伦·雷乃/克里斯·马克/吉兰·克洛凯导演作品”共 19 字符，旧上限 15
+            # 迫使匹配起点后移产生截断名“乃/克里斯·马克/吉兰·克洛凯”）
             genre_alt = '|'.join(re.escape(g) for g in self.categories)
             for m in re.finditer(
-                rf'([^《》\n\s]{{2,15}}?)导演(?:(?:高分|热门|冷门)?(?:{genre_alt})?(?:电影|剧集|纪录片|动画)?作品|作品|电影|剧集|纪录片|动画|推荐|全\d+集|第\d+季|\s|$)',
+                rf'([^《》\n\s]{{2,35}}?)导演(?:(?:高分|热门|冷门)?(?:{genre_alt})?(?:电影|剧集|纪录片|动画)?作品|作品|电影|剧集|纪录片|动画|推荐|全\d+集|第\d+季|\s|$)',
                 text,
             ):
                 director_candidates.append(m.group(1).strip())

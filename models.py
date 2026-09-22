@@ -270,9 +270,12 @@ class MovieInfo:
         if self.foreign_name:
             foreign = safe_filename(self.foreign_name)
             if season_range:
-                # 外文名自带季数后缀（如“Екатерина Сезон 1”）时，
-                # 去掉末尾数字与“1-N季”合并为“Сезон 1-N季”
-                foreign = re.sub(r'(Сезон|Season)\s*\d+\s*$', r'\1', foreign).rstrip()
+                # 俄文季数词保留词干、去掉末尾数字，与“1-N季”合并为
+                # “Сезон 1-N季”（叶卡捷琳娜大帝，语料既有惯例）；
+                # 英文“Season N”季词在“1-N季”前没有信息量，整个去除
+                # （马尔科姆的一家/中央公园，2026-09-23 基准统一）
+                foreign = re.sub(r'Сезон\s*\d+\s*$', 'Сезон', foreign).rstrip()
+                foreign = re.sub(r'\s*Season\s*\d+\s*$', '', foreign).rstrip()
                 # 其余拉丁字母季数词后缀整体去除（占领区：“Okkupert Sesong 1”
                 # 全季打包→“Okkupert”，季词在“1-N季”前没有信息量）
                 foreign = re.sub(

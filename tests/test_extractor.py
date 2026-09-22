@@ -2739,3 +2739,39 @@ class TestBatch0908Alignment:
         assert info.language == "意英语"
         filename = info.generate_filename()
         assert "高分片 意英语中英双字" in filename
+
+    def test_three_co_directors_exceeding_length_cap(self):
+        # 雕像也会死亡：三人斜杠名单共 19 字符超旧上限 15，匹配起点被迫
+        # 后移曾截断为“乃/克里斯·马克/吉兰·克洛凯”，上限放宽后完整保留
+        info = self._extract(
+            "《雕像也会死亡》\n阿伦·雷乃/克里斯·马克/吉兰·克洛凯导演作品\n"
+            "高分纪录短片推荐\n法语中字\n见平👇"
+        )
+        assert info.director == "阿伦·雷乃、克里斯·马克、吉兰·克洛凯"
+        filename = info.generate_filename()
+        assert "阿伦·雷乃、克里斯·马克、吉兰·克洛凯导演 高分纪录短片" in filename
+
+    def test_english_season_suffix_dropped_in_range(self):
+        # 马尔科姆的一家/中央公园：外文名尾部“Season N”在“1-N季”前
+        # 没有信息量，季区间渲染时整个去除（2026-09-23 基准统一，
+        # 与夸克文件名是否带区间无关；俄文“Сезон”仍保留词干）
+        info = MovieInfo(
+            chinese_name="马尔科姆的一家",
+            foreign_name="Malcolm in the Middle Season 1",
+            season=7,
+            season_raw="全7",
+            quark_file_name="马尔科姆的一家7季",
+            raw_text="《马尔科姆的一家》\n冷门高分喜剧剧集推荐\n全7季 英语中英双字",
+        )
+        assert info.generate_filename().startswith(
+            "马尔科姆的一家 Malcolm in the Middle 1-7季 （"
+        )
+        info = MovieInfo(
+            chinese_name="中央公园",
+            foreign_name="Central Park Season 1",
+            season=3,
+            season_raw="全3",
+            quark_file_name="中央公园 1-3季",
+            raw_text="《中央公园》\n冷门喜剧动画剧集推荐\n全3季 英语中英双字",
+        )
+        assert info.generate_filename().startswith("中央公园 Central Park 1-3季 （")
