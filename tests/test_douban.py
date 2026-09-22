@@ -19,11 +19,30 @@ from douban import (
 
 @pytest.fixture(autouse=True)
 def isolate_douban_cache(tmp_path, monkeypatch):
-    """隔离豆瓣磁盘缓存：测试写入临时文件，避免污染真实 .douban_cache.json。"""
+    """隔离豆瓣磁盘缓存：测试写入临时文件，避免污染真实 .douban_cache.json。
+
+    同时重置限流短路标记（真实请求的集成测试可能置位，泄漏到后续用例）。
+    """
     monkeypatch.setattr(douban, "CACHE_FILE", tmp_path / "douban_cache_test.json")
     douban._cache.clear()
+    monkeypatch.setattr(douban, "_rexxar_search_blocked", False)
     yield
     douban._cache.clear()
+
+
+class _StubSession:
+    """把 Session.get 委托给 fake_get，供 monkeypatch 替换 douban._session。
+
+    避免测试触达真实网络（会话懒初始化会访问 m.douban.com 首页）。
+    """
+
+    headers = {}
+
+    def __init__(self, handler):
+        self._handler = handler
+
+    def get(self, url, **kwargs):
+        return self._handler(url, **kwargs)
 
 
 class TestIsChinese:
@@ -156,39 +175,55 @@ class TestMinorScriptLatinPreference:
         assert _is_latin_title("") is False
 
     @staticmethod
-    def _fake_session(monkeypatch, search_title, aka_list, sid="30394484"):
-        """构造搜索页 + rexxar API 响应，返回 rexxar 请求计数。"""
-        rexxar_calls = [0]
+    def _fake_session(monkeypatch, original_title, aka_list, sid="30394484"):
+        """构造 rexxar 搜索 + 条目详情响应，返回详情请求计数。
+
+        搜索条目的中文标题固定为查询名（rexxar API 的 title 即中文标题，
+        外文名 original_title 由详情接口返回）。
+        """
+        detail_calls = [0]
 
         class FakeResp:
-            def __init__(self, text, status_code=200):
-                self.text = text
+            def __init__(self, payload, status_code=200):
+                self._payload = payload
                 self.status_code = status_code
 
             def json(self):
-                import json as _json
-                return _json.loads(self.text)
+                return self._payload
 
-        search_html = (
-            '<div class="result">'
-            f'<a class="nbg" href="https://www.douban.com/link2/" '
-            f'onclick="moreurl(this,{{sid: {sid}}})" title="{search_title}">'
-            '<img src="https://img.doubanio.com/x.jpg"></a>'
-            '<span class="rating_nums">7.8</span>（15856人评价）2019</div>'
-        )
+        search_payload = {
+            "total": 1,
+            "items": [
+                {
+                    "layout": "subject",
+                    "target_type": "movie",
+                    "target": {
+                        "id": sid,
+                        "title": "然后我们跳了舞",
+                        "year": "2019",
+                        "rating": {"count": 15856, "value": 7.8},
+                        "card_subtitle": "瑞典 格鲁吉亚 / 剧情 / 列万·阿金",
+                    },
+                }
+            ],
+        }
 
         def fake_get(url, *args, **kwargs):
-            if "douban.com/search" in url:
-                return FakeResp(search_html)
-            if "rexxar" in url:
-                rexxar_calls[0] += 1
-                import json as _json
-                return FakeResp(_json.dumps({"title": "然后我们跳了舞", "aka": aka_list}))
+            if "rexxar/api/v2/search/movie" in url:
+                return FakeResp(search_payload)
+            if "subject_suggest" in url:
+                return FakeResp([])
+            if "rexxar/api/v2/movie/" in url:
+                detail_calls[0] += 1
+                return FakeResp(
+                    {"title": "然后我们跳了舞", "original_title": original_title,
+                     "aka": aka_list}
+                )
             raise AssertionError(f"意外请求: {url}")
 
-        monkeypatch.setattr(douban.requests, "get", fake_get)
+        monkeypatch.setattr(douban, "_session", _StubSession(fake_get))
         douban._last_request_time = 0.0
-        return rexxar_calls
+        return detail_calls
 
     def test_minor_script_replaced_by_latin_aka(self, monkeypatch):
         calls = self._fake_session(
@@ -202,18 +237,17 @@ class TestMinorScriptLatinPreference:
         assert calls[0] == 1
 
     def test_no_latin_aka_keeps_native_title(self, monkeypatch):
-        calls = self._fake_session(
-            monkeypatch, "လိပ်ပြာလင်္ကာ", ["灵魂乐"]
-        )
-        foreign, rating = _fetch_douban_search("魂歌")
+        calls = self._fake_session(monkeypatch, "လိပ်ပြာလင်္ကာ", ["灵魂乐"])
+        foreign, rating = _fetch_douban_search("然后我们跳了舞")
         assert foreign == "လိပ်ပြာလင်္ကာ"
         assert calls[0] == 1
 
-    def test_major_script_skips_rexxar(self, monkeypatch):
+    def test_major_script_keeps_original_title(self, monkeypatch):
+        # 大语种（韩文）保留原文，不做拉丁替换；详情必然请求一次
         calls = self._fake_session(monkeypatch, "슈룹", ["And Then We Danced"])
-        foreign, rating = _fetch_douban_search("王后伞下")
+        foreign, rating = _fetch_douban_search("然后我们跳了舞")
         assert foreign == "슈룹"
-        assert calls[0] == 0
+        assert calls[0] == 1
 
     def test_stale_minor_script_cache_refreshed(self, monkeypatch):
         """旧缓存中的小语种标题应被忽略并重查升级为拉丁标题。"""
@@ -227,68 +261,243 @@ class TestMinorScriptLatinPreference:
         assert result == ("And Then We Danced", "7.8")
 
 
-class TestEntryYearParsing:
-    """条目年份解析：评价人数（N人评）与超区间数字不应被当成上映年。
+class TestRexxarSearchFlow:
+    """rexxar 搜索 API 流程：年份过滤、无结果、非 200 状态。
 
-    回归案例：搜索“圣罗兰传”时，波尼洛版《Saint Laurent》块内
-    “（2067人评）”被解析成 2067 年，导致 year=2014 过滤滑到错误条目。
+    年份为结构化字段，旧 www/search HTML 解析的误判隐患
+    （海报 URL 数字、N人评当年份）已不存在。
     """
 
     @staticmethod
-    def _search_html(blocks, unit="人评"):
-        parts = []
-        for title, rating, count, year_line in blocks:
-            parts.append(
-                '<div class="result">'
-                f'<a class="nbg" href="https://movie.douban.com/subject/x" '
-                f'title="{title}">'
-                # 海报 URL 里的数字（p1197911950.jpg）不得被当成上映年
-                f'<img src="https://img.doubanio.com/view/photo/'
-                f'public/p1197911950.jpg">'
-                f'<span class="rating_nums">{rating}</span>'
-                f'（{count}{unit}） {year_line}'
-                "</div>"
-            )
-        return "<html><body>" + "".join(parts) + "</body></html>"
-
-    def test_rating_count_not_parsed_as_year(self, monkeypatch):
+    def _fake(monkeypatch, items, detail=None):
         class FakeResp:
-            status_code = 200
-            text = self._search_html(
-                [
-                    # 仅有未来年份（超区间）→ 年份应为 None，被 2014 过滤掉
-                    ("Future Doc", "9.0", "300", "2067年上映"),
-                    # “2067人评”不得当成 2067 年，真实年份取信息行的 2014
-                    ("Saint Laurent", "7.2", "2067", "2014年上映"),
-                    ("Yves Saint Laurent", "6.7", "12345", "2014年上映"),
-                ]
-            )
+            def __init__(self, payload, status_code=200):
+                self._payload = payload
+                self.status_code = status_code
 
-        monkeypatch.setattr(douban.requests, "get", lambda *a, **k: FakeResp())
+            def json(self):
+                return self._payload
+
+        def fake_get(url, *args, **kwargs):
+            if "rexxar/api/v2/search/movie" in url:
+                return FakeResp({"total": len(items), "items": items})
+            if "subject_suggest" in url:
+                return FakeResp([])
+            if "rexxar/api/v2/movie/" in url:
+                return FakeResp(detail or {})
+            raise AssertionError(f"意外请求: {url}")
+
+        monkeypatch.setattr(douban, "_session", _StubSession(fake_get))
         douban._last_request_time = 0.0
-        foreign, rating = _fetch_douban_search("圣罗兰传", 2014)
-        assert foreign == "Saint Laurent"
-        assert rating == "7.2"
 
-    def test_rating_count_with_jia_not_parsed_as_year(self, monkeypatch):
-        """回归：搜索“水”时《Water》块内海报 URL “p1197911950.jpg”的
-        1979/1950、评价人数“（1979人评价）”都被当年份，真实年份 2005
-        匹配失败、错选同年份的《水果硬糖》(Hard Candy)。"""
+    @staticmethod
+    def _item(sid, title, year, rating, subtitle=""):
+        return {
+            "target_type": "movie",
+            "target": {
+                "id": sid,
+                "title": title,
+                "year": year,
+                "rating": {"count": 100, "value": rating},
+                "card_subtitle": subtitle,
+            },
+        }
+
+    def test_year_filter_picks_matching_entry(self, monkeypatch):
+        # 2022 美剧在前，2019 韩片在后；year=2019 应选中韩片条目
+        self._fake(
+            monkeypatch,
+            items=[
+                self._item("35410155", "监视者", "2022", 6.3, "美国 / 剧情 惊悚"),
+                self._item("30442498", "监视者", "2019", 7.6, "韩国 / 惊悚 犯罪 / 韩石圭"),
+            ],
+            detail={"original_title": "왓쳐", "aka": ["Watcher"]},
+        )
+        foreign, rating = _fetch_douban_search("监视者", 2019)
+        assert foreign == "왓쳐"
+        assert rating == "7.6"
+
+    def test_hint_names_use_card_subtitle(self, monkeypatch):
+        # 同年同名条目，主演名在 card_subtitle 里甄别（合唱团事件）
+        self._fake(
+            monkeypatch,
+            items=[
+                self._item("37193250", "合唱团", "2025", 7.3,
+                           "中国台湾 / 剧情 / 林孝谦 / 陈意涵"),
+                self._item("36828836", "合唱团", "2025", 6.7,
+                           "英国 / 剧情 / 尼古拉斯·希特纳 / 拉尔夫·费因斯"),
+            ],
+            detail={"original_title": "The Choral", "aka": []},
+        )
+        foreign, rating = _fetch_douban_search("合唱团", 2025, ["拉尔夫·费因斯"])
+        assert foreign == "The Choral"
+        assert rating == "6.7"
+
+    def test_no_items_returns_none(self, monkeypatch):
+        self._fake(monkeypatch, items=[])
+        foreign, rating = _fetch_douban_search("不存在的片子")
+        assert foreign is None
+        assert rating is None
+
+    def test_non_200_returns_none(self, monkeypatch):
         class FakeResp:
-            status_code = 200
-            text = self._search_html(
-                [
-                    ("Water", "8.4", "1979", "2005年上映"),
-                    ("Hard Candy", "7.5", "9999", "2005年上映"),
-                ],
-                unit="人评价",
-            )
+            status_code = 503
+            text = ""
 
-        monkeypatch.setattr(douban.requests, "get", lambda *a, **k: FakeResp())
+        monkeypatch.setattr(douban, "_session", _StubSession(lambda *a, **k: FakeResp()))
         douban._last_request_time = 0.0
-        foreign, rating = _fetch_douban_search("水", 2005)
-        assert foreign == "Water"
-        assert rating == "8.4"
+        foreign, rating = _fetch_douban_search("监视者")
+        assert foreign is None
+        assert rating is None
+
+    def test_detail_failure_keeps_rating(self, monkeypatch):
+        # 详情请求失败时外文名为空，评分仍保留
+        class FakeResp:
+            def __init__(self, payload, status_code=200):
+                self._payload = payload
+                self.status_code = status_code
+
+            def json(self):
+                return self._payload
+
+        def fake_get(url, *args, **kwargs):
+            if "rexxar/api/v2/search/movie" in url:
+                return FakeResp({"total": 1, "items": [self._item("1", "疯神", "2021", 7.4)]})
+            if "rexxar/api/v2/movie/" in url:
+                return FakeResp({}, status_code=404)
+            raise AssertionError(f"意外请求: {url}")
+
+        monkeypatch.setattr(douban, "_session", _StubSession(fake_get))
+        douban._last_request_time = 0.0
+        foreign, rating = _fetch_douban_search("疯神", 2021)
+        assert foreign is None
+        assert rating == "7.4"
+
+    def test_chinese_original_title_dropped_by_search_movie(self, monkeypatch):
+        # 国产片 original_title 即中文名，search_movie 应丢弃外文名
+        self._fake(
+            monkeypatch,
+            items=[self._item("1", "测试国产片", "2024", 8.0)],
+            detail={"original_title": "测试国产片", "aka": []},
+        )
+        assert search_movie("测试国产片") == (None, "8.0")
+
+
+class TestSuggestFallback:
+    """rexxar 搜索被限流（403）时自动降级到 suggest 建议接口。"""
+
+    @staticmethod
+    def _fake(monkeypatch, suggest_items, detail):
+        class FakeResp:
+            def __init__(self, payload, status_code=200):
+                self._payload = payload
+                self.status_code = status_code
+
+            def json(self):
+                return self._payload
+
+        def fake_get(url, *args, **kwargs):
+            if "rexxar/api/v2/search/movie" in url:
+                return FakeResp({"msg": "need_login"}, status_code=403)
+            if "subject_suggest" in url:
+                return FakeResp(suggest_items)
+            if "rexxar/api/v2/movie/" in url:
+                return FakeResp(detail)
+            if url.endswith("m.douban.com/"):
+                return FakeResp("")
+            raise AssertionError(f"意外请求: {url}")
+
+        # 403 会触发主路重建会话（_session = None 后 _get_session() 建真会话
+        # 并访问真实首页），钉住 _get_session 返回桩，保证测试不触网
+        stub = _StubSession(fake_get)
+        monkeypatch.setattr(douban, "_get_session", lambda: stub)
+        monkeypatch.setattr(douban, "_rexxar_search_blocked", False)
+        douban._last_request_time = 0.0
+
+    @staticmethod
+    def _suggest(sid, title, year, sub_title=""):
+        return {
+            "id": sid, "title": title, "sub_title": sub_title,
+            "year": year, "type": "movie", "episode": "",
+        }
+
+    def test_403_falls_back_to_suggest(self, monkeypatch):
+        self._fake(
+            monkeypatch,
+            suggest_items=[self._suggest("21770915", "冬眠", "2014", "Kış Uykusu")],
+            detail={
+                "title": "冬眠", "original_title": "Kış Uykusu",
+                "year": "2014",
+                "rating": {"count": 100, "value": 8.2},
+                "directors": [{"name": "努里·比格·锡兰"}],
+                "actors": [], "aka": [],
+            },
+        )
+        foreign, rating = _fetch_douban_search("冬眠", 2014)
+        assert foreign == "Kış Uykusu"
+        assert rating == "8.2"
+        # 连续 403 后主路置位短路，后续不再探测
+        assert douban._rexxar_search_blocked is True
+
+    def test_season_entry_uses_sub_title(self, monkeypatch):
+        # 季类条目：original_title 带“Season N”后缀，外文名取 suggest 的 sub_title
+        self._fake(
+            monkeypatch,
+            suggest_items=[
+                self._suggest("37437665", "行尸走肉：死亡之城 第三季", "2026",
+                              "The Walking Dead: Dead City"),
+            ],
+            detail={
+                "title": "行尸走肉：死亡之城 第三季",
+                "original_title": "The Walking Dead: Dead City Season 3",
+                "year": "2026",
+                "rating": {"count": 100, "value": 6.9},
+                "directors": [], "actors": [], "aka": [],
+            },
+        )
+        monkeypatch.setattr(douban, "_rexxar_search_blocked", True)
+        foreign, rating = _fetch_douban_search("行尸走肉：死亡之城")
+        assert foreign == "The Walking Dead: Dead City"
+        assert rating == "6.9"
+
+    def test_exact_title_sorted_first(self, monkeypatch):
+        # 相关性把季条目排在主条目前时，同名主条目应排到最前
+        self._fake(
+            monkeypatch,
+            suggest_items=[
+                self._suggest("1", "测试剧 第二季", "2025", "Test S2"),
+                self._suggest("2", "测试剧", "2023", "Test"),
+            ],
+            detail={
+                "title": "测试剧", "original_title": "Test", "year": "2023",
+                "rating": {"count": 1, "value": 7.0},
+                "directors": [], "actors": [], "aka": [],
+            },
+        )
+        monkeypatch.setattr(douban, "_rexxar_search_blocked", True)
+        foreign, rating = _fetch_douban_search("测试剧", 2023)
+        assert foreign == "Test"
+        assert rating == "7.0"
+
+    def test_non_movie_types_filtered(self, monkeypatch):
+        # book/music 等非影视条目过滤
+        self._fake(
+            monkeypatch,
+            suggest_items=[
+                {"id": "9", "title": "同名书", "sub_title": "", "year": "2020",
+                 "type": "book", "episode": ""},
+                self._suggest("8", "同名影视", "2021", "Same Name"),
+            ],
+            detail={
+                "title": "同名影视", "original_title": "Same Name",
+                "rating": {"count": 1, "value": 6.0},
+                "directors": [], "actors": [], "aka": [],
+            },
+        )
+        monkeypatch.setattr(douban, "_rexxar_search_blocked", True)
+        foreign, rating = _fetch_douban_search("同名影视")
+        assert foreign == "Same Name"
+        assert rating == "6.0"
 
 
 class TestHintNameEntrySelection:

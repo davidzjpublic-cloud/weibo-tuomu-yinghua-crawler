@@ -7,11 +7,9 @@
 
 import json
 import logging
-import os
 import re
 import time
 import unicodedata
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -27,9 +25,35 @@ CACHE_TTL_SECONDS = 7 * 24 * 3600
 # 豆瓣本地文件缓存路径（项目根目录）
 CACHE_FILE = Path(__file__).resolve().parent / ".douban_cache.json"
 
-# 连续请求间隔（秒），降低被豆瓣限流概率
-REQUEST_DELAY_SECONDS = 1.0
+# 连续请求间隔（秒），降低被豆瓣限流概率。
+# rexxar 流程每条影片发 2 个请求（搜索 + 详情），取 2 秒维持原单请求节奏
+REQUEST_DELAY_SECONDS = 2.0
 _last_request_time: float = 0.0
+
+# m.douban.com 会话：复用连接并携带 bid 设备标识 Cookie。
+# 匿名无 Cookie 连续请求会被判 need_login（403），带 bid 后正常
+_session: Optional["requests.Session"] = None
+
+
+def _get_session() -> "requests.Session":
+    """懒初始化 m.douban.com 会话（先访问首页获取 bid Cookie）。"""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://m.douban.com/",
+        })
+        try:
+            _session.get("https://m.douban.com/", timeout=15)
+        except requests.RequestException as e:
+            logger.warning(f"m.douban.com 会话初始化失败: {e}")
+    return _session
 
 
 def _load_disk_cache() -> None:
@@ -149,25 +173,26 @@ def _is_latin_title(text: str) -> bool:
     return has_letter
 
 
-def _throttled_get(url: str, headers: dict, timeout: int = 15) -> Optional["requests.Response"]:
-    """带请求间隔的 GET，失败返回 None。"""
+def _throttled_get(
+    url: str, headers: dict, timeout: int = 15, params: Optional[dict] = None,
+) -> Optional["requests.Response"]:
+    """带请求间隔的会话 GET，失败返回 None。"""
     global _last_request_time
     elapsed = time.time() - _last_request_time
     if elapsed < REQUEST_DELAY_SECONDS:
         time.sleep(REQUEST_DELAY_SECONDS - elapsed)
     _last_request_time = time.time()
     try:
-        return requests.get(url, headers=headers, timeout=timeout)
+        return _get_session().get(url, headers=headers, params=params, timeout=timeout)
     except requests.RequestException as e:
         logger.warning(f"请求失败 {url}: {e}")
         return None
 
 
-def _fetch_latin_aka(sid: str) -> Optional[str]:
-    """查询条目“又名”列表，返回第一个纯拉丁字母标题。
+def _fetch_movie_detail(sid: str) -> Optional[dict]:
+    """查询条目详情（original_title / aka），失败返回 None。
 
     通过 m.douban.com 的 rexxar API 获取（详情页有反爬，API 更稳定）。
-    无拉丁标题或请求失败时返回 None（保留原文字标题）。
     """
     if not sid:
         return None
@@ -185,13 +210,24 @@ def _fetch_latin_aka(sid: str) -> Optional[str]:
     if response is None or response.status_code != 200:
         return None
     try:
-        aka_list = response.json().get("aka") or []
+        return response.json()
     except ValueError:
         return None
-    for aka in aka_list:
+
+
+def _pick_latin_aka(aka_list: Optional[list]) -> Optional[str]:
+    """从“又名”列表返回第一个纯拉丁字母标题，无则返回 None。"""
+    for aka in aka_list or []:
         if isinstance(aka, str) and _is_latin_title(aka.strip()):
             return aka.strip()
     return None
+
+
+def _clean_series_suffix(name: str) -> str:
+    """截断日文名中常见的“・第X部・...”系列后缀。"""
+    name = re.sub(r'[・]\s*第[一二两三四五六七八九十\d]+部[・].*$', '', name)
+    name = re.sub(r'[・]\s*第[一二两三四五六七八九十\d]+部.*$', '', name)
+    return name.strip()
 
 
 def _choose_entry(
@@ -200,24 +236,22 @@ def _choose_entry(
     year: Optional[int] = None,
     hint_names: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """从 (标题, 评分, 年份, 条目ID, 块文本) 候选条目中选择最合适的一个，返回 (外文名, 评分, 条目ID)。
+    """从 (中文标题, 评分, 年份, 条目ID, 块文本) 候选条目中选择最合适的一个，
+    返回 (标题, 评分, 条目ID)。
 
     规则：
-    1. 去掉与中文名完全相同的候选（那只是中文名本身，不是外文名）。
-    2. 已知年份时，优先在年份匹配的条目中选择。
-    3. 提供了主演/导演名时，优先选条目摘要里含这些人名的候选——
+    1. 已知年份时，优先在年份匹配的条目中选择。
+    2. 提供了主演/导演名时，优先选条目摘要里含这些人名的候选——
        豆瓣按相关性排序可能把同年同名的另一部片排在前
        （“合唱团”：陈意涵《阳光女子合唱团》排在拉尔夫·费因斯 The Choral 前）。
-    4. 取相关性排名最靠前的候选——豆瓣搜索排序即为相关性，
-       韩文/日文标题同样是合法外文名，不再按拉丁字母占比跳过。
-    5. 清理日文名中常见的“・第X部・...”后缀。
+    3. 取相关性排名最靠前的候选——豆瓣搜索排序即为相关性。
+       （旧 www/search 流程候选槽位是外文名、需剔除与中文名相同的候选；
+       rexxar API 候选即中文标题，精确匹配恰是最相关条目，不再剔除。）
     """
     if not entries:
         return None, None, None
 
-    filtered = [i for i, (t, _, _, _, _) in enumerate(entries) if t != chinese_name]
-    if not filtered:
-        filtered = list(range(len(entries)))
+    filtered = list(range(len(entries)))
 
     if year:
         year_hits = [i for i in filtered if entries[i][2] == year]
@@ -233,17 +267,20 @@ def _choose_entry(
         if hint_hits:
             filtered = hint_hits
 
-    def clean(n: str) -> str:
-        # 截断“・第X部・...”这类日文系列后缀
-        n = re.sub(r'[・]\s*第[一二两三四五六七八九十\d]+部[・].*$', '', n)
-        n = re.sub(r'[・]\s*第[一二两三四五六七八九十\d]+部.*$', '', n)
-        return n.strip()
-
     for idx in filtered:
-        name = clean(entries[idx][0])
+        name = _clean_series_suffix(entries[idx][0])
         if name:
             return name, entries[idx][1], entries[idx][3]
     return None, None, None
+
+
+def _detail_has_hints(detail: dict, hints: List[str]) -> bool:
+    """详情里的导演/演员/摘要文本是否包含任一人名提示。"""
+    names = " ".join(
+        p.get("name", "") for p in (detail.get("directors") or []) + (detail.get("actors") or [])
+    )
+    text = f"{names} {detail.get('card_subtitle') or ''}"
+    return any(h in text for h in hints)
 
 
 def _fetch_douban_search(
@@ -252,36 +289,65 @@ def _fetch_douban_search(
     hint_names: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """请求豆瓣搜索并解析外文名与评分。year 用于歧义中文名的条目筛选，
-    hint_names（主演/导演名）用于同名条目的人名甄别。"""
+    hint_names（主演/导演名）用于同名条目的人名甄别。
+
+    主路：m.douban.com 的 rexxar 搜索 API（PC 站 www/search 已对脚本
+    软封：连接后不响应/503）；被限流（403 need_login）时自动降级到
+    movie.douban.com 的 suggest 建议接口发现条目。"""
     if not chinese_name:
         return None, None
 
-    global _last_request_time
+    result = _fetch_via_rexxar_search(chinese_name, year, hint_names)
+    if result != (None, None):
+        return result
+    return _fetch_via_suggest(chinese_name, year, hint_names)
+
+
+# rexxar 搜索连续 403 后置位：本次进程内跳过主路，直接走 suggest 兜底，
+# 避免每条影片都重复探测（每条约 10 秒超时/重试开销）
+_rexxar_search_blocked = False
+
+
+def _fetch_via_rexxar_search(
+    chinese_name: str,
+    year: Optional[int] = None,
+    hint_names: Optional[List[str]] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """rexxar 搜索 API 主路：搜索候选 → 选中条目 → 详情取 original_title。"""
+    global _last_request_time, _session, _rexxar_search_blocked
+    if _rexxar_search_blocked:
+        return None, None
     elapsed = time.time() - _last_request_time
     if elapsed < REQUEST_DELAY_SECONDS:
         time.sleep(REQUEST_DELAY_SECONDS - elapsed)
 
-    url = "https://www.douban.com/search"
-    params = {"cat": "1002", "q": chinese_name}
+    url = "https://m.douban.com/rexxar/api/v2/search/movie"
+    params = {"q": chinese_name}
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/126.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Referer": "https://www.douban.com/",
-        "Connection": "keep-alive",
+        "Accept": "application/json",
+        "Referer": "https://m.douban.com/",
     }
 
     try:
-        # 瞬时失败（超时/限流）重试一次，避免整条外文名/评分丢失
+        # 瞬时失败（超时/限流/会话失效）重试一次，避免整条外文名/评分丢失
         response = None
         for attempt in range(2):
             _last_request_time = time.time()
             try:
-                response = requests.get(url, params=params, headers=headers, timeout=15)
+                response = _get_session().get(
+                    url, params=params, headers=headers, timeout=15
+                )
+                if response.status_code == 403 and attempt == 0:
+                    # 会话被判定 need_login，丢弃重建后重试
+                    logger.warning("豆瓣搜索 403，重建会话后重试")
+                    _session = None
+                    time.sleep(3)
+                    continue
                 break
             except requests.RequestException as e:
                 if attempt == 0:
@@ -292,51 +358,34 @@ def _fetch_douban_search(
             return None, None
         if response.status_code != 200:
             logger.warning(f"豆瓣搜索请求失败: {response.status_code}")
+            if response.status_code == 403:
+                # 会话重建后仍 403：主路被限流，本进程后续直接走 suggest 兜底
+                _rexxar_search_blocked = True
             return None, None
 
-        text = response.text
+        try:
+            data = response.json()
+        except ValueError:
+            logger.warning("豆瓣搜索返回非 JSON")
+            return None, None
 
-        # 按搜索结果块配对解析（标题 + 该条目自己的评分 + 条目年份 + 条目ID + 块文本），
-        # 避免外文名取自候选 A 而评分取自页面第一个结果
+        # 条目元组：(中文标题, 评分, 年份, 条目ID, 摘要文本)。
+        # card_subtitle 含国家/类型/导演/主演名，供同名条目的人名甄别；
+        # 年份是干净字段，无需旧 HTML 解析的防误判处理
         entries: List[Tuple[str, Optional[str], Optional[int], Optional[str], str]] = []
-        for block in re.split(r'<div[^>]*class="[^"]*result[^"]*"', text)[1:]:
-            title_match = re.search(
-                r'<a[^>]*class="nbg"[^>]*title="([^"]+)"', block,
-            )
-            if not title_match:
+        for item in data.get("items") or []:
+            target = item.get("target") or {}
+            if not target.get("id"):
                 continue
-            # 条目ID：onclick 里的 sid 或 link2 跳转 URL 中编码的 subject id
-            sid_match = re.search(r'sid:\s*(\d+)', block)
-            if not sid_match:
-                sid_match = re.search(r'subject%2F(\d+)', block)
-            rating_match = re.search(
-                r'<span[^>]*class="rating_nums"[^>]*>([\d.]+)</span>',
-                block,
-            )
-            # 条目年份取标题属性以外的第一个四位数年份（信息行里的上映年）。
-            # 先剥掉 HTML 标签/属性（海报 URL “p1197911950.jpg”、条目链接
-            # “subject/1999147”里的数字会被当年份），再剔除“N人评（价）”
-            # 的评价人数（否则“（1979人评价）”会被当成 1979 年），
-            # 并跳过超出合理区间的数字（摘要里的年份/编号等）
-            block_wo_title = re.sub(
-                r'<a[^>]*class="nbg"[^>]*title="[^"]*"', '', block,
-            )
-            plain_block = re.sub(r'<[^>]+>', ' ', block_wo_title)
-            plain_block = re.sub(r'\d+人评价?', ' ', plain_block)
-            max_year = datetime.now().year + 3
-            year_match = None
-            for m in re.finditer(r'(19|20)\d{2}', plain_block):
-                y = int(m.group(0))
-                if 1900 <= y <= max_year:
-                    year_match = m
-                    break
+            rating_value = (target.get("rating") or {}).get("value")
+            year_str = str(target.get("year") or "")
             entries.append(
                 (
-                    title_match.group(1),
-                    rating_match.group(1) if rating_match else None,
-                    int(year_match.group(0)) if year_match else None,
-                    sid_match.group(1) if sid_match else None,
-                    plain_block,
+                    target.get("title") or "",
+                    str(rating_value) if rating_value else None,
+                    int(year_str) if year_str.isdigit() else None,
+                    str(target["id"]),
+                    target.get("card_subtitle") or "",
                 )
             )
 
@@ -344,20 +393,118 @@ def _fetch_douban_search(
             logger.warning(f"豆瓣搜索无结果条目: {chinese_name}")
             return None, None
 
-        foreign_name, rating, sid = _choose_entry(
-            entries, chinese_name, year, hint_names
-        )
-        # 小语种文字标题（格鲁吉亚文、缅甸文等）改用“又名”中的拉丁字母标题；
-        # 中/日/韩/泰/俄等大语种保留原文
-        if foreign_name and _is_minor_script(foreign_name):
-            latin = _fetch_latin_aka(sid)
-            if latin:
-                logger.info(f"小语种标题改为拉丁字母: {foreign_name} -> {latin}")
-                foreign_name = latin
+        _, rating, sid = _choose_entry(entries, chinese_name, year, hint_names)
+        # 搜索结果不带外文名，取选中条目详情的 original_title
+        foreign_name = None
+        detail = _fetch_movie_detail(sid)
+        if detail:
+            foreign_name = _clean_series_suffix(
+                detail.get("original_title") or ""
+            ) or None
+            # 小语种文字标题（格鲁吉亚文、缅甸文等）改用“又名”中的拉丁字母标题；
+            # 中/日/韩/泰/俄等大语种保留原文
+            if foreign_name and _is_minor_script(foreign_name):
+                latin = _pick_latin_aka(detail.get("aka"))
+                if latin:
+                    logger.info(f"小语种标题改为拉丁字母: {foreign_name} -> {latin}")
+                    foreign_name = latin
         return foreign_name, rating
     except Exception as e:
         logger.error(f"豆瓣搜索异常: {e}")
         return None, None
+
+
+def _fetch_via_suggest(
+    chinese_name: str,
+    year: Optional[int] = None,
+    hint_names: Optional[List[str]] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """suggest 建议接口兜底：rexxar 搜索被限流时的候选发现。
+
+    movie.douban.com 的建议接口返回条目（sub_title 即外文名，季类条目
+    也不带“Season N”后缀），选中后仍取 rexxar 详情补评分/人名甄别。
+    """
+    response = _throttled_get(
+        "https://movie.douban.com/j/subject_suggest",
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://movie.douban.com/",
+        },
+        params={"q": chinese_name},
+    )
+    if response is None or response.status_code != 200:
+        return None, None
+    try:
+        items = response.json()
+    except ValueError:
+        return None, None
+    if not isinstance(items, list):
+        return None, None
+
+    # 建议接口 type 含 book/music 等，只留影视条目（剧集的 type 同为 movie）
+    cands = []
+    for it in items:
+        if it.get("type") != "movie" or not it.get("id"):
+            continue
+        year_str = str(it.get("year") or "")
+        cands.append(
+            (
+                it.get("title") or "",
+                it.get("sub_title") or "",
+                int(year_str) if year_str.isdigit() else None,
+                str(it["id"]),
+            )
+        )
+    if not cands:
+        return None, None
+
+    # 完全同名的条目排前（suggest 相关性可能把季条目排在主条目前）
+    cands.sort(key=lambda c: c[0] != chinese_name)
+
+    pool = cands
+    if year:
+        year_hits = [c for c in pool if c[2] == year]
+        if year_hits:
+            pool = year_hits
+
+    # 逐个取详情：命中人名提示即选；无提示取第一个有详情的；
+    # 全不命中时回退第一个有详情的
+    hints = [h.strip() for h in (hint_names or []) if h and h.strip()]
+    fallback = None
+    for cand in pool[:5]:
+        detail = _fetch_movie_detail(cand[3])
+        if not detail:
+            continue
+        if fallback is None:
+            fallback = (cand, detail)
+        if not hints or _detail_has_hints(detail, hints):
+            fallback = (cand, detail)
+            break
+    if not fallback:
+        return None, None
+    cand, detail = fallback
+
+    # 外文名优先用 suggest 的 sub_title（季类条目的 original_title 带
+    # “Season N”后缀，sub_title 是不带后缀的系列名）
+    foreign_name = (
+        cand[1]
+        or _clean_series_suffix(detail.get("original_title") or "")
+        or None
+    )
+    rating_value = (detail.get("rating") or {}).get("value")
+    rating = str(rating_value) if rating_value else None
+    if foreign_name and _is_minor_script(foreign_name):
+        latin = _pick_latin_aka(detail.get("aka"))
+        if latin:
+            logger.info(f"小语种标题改为拉丁字母: {foreign_name} -> {latin}")
+            foreign_name = latin
+    if foreign_name or rating:
+        logger.info(f"suggest 兜底命中: {chinese_name} -> {foreign_name} {rating}")
+    return foreign_name, rating
 
 
 def _drop_embedded_name(
