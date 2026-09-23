@@ -562,6 +562,14 @@ class MovieExtractor:
                 and "艺术" not in found_categories
             ):
                 found_categories.insert(found_categories.index("纪录"), "艺术")
+            # “灾难纪录剧集”同理（悲剧预言：冷门灾难纪录剧集推荐），插到“纪录”前；
+            # 以“灾难纪录”连写为条件，避免片名自带“灾难”（泰坦：海门灾难）误入类别
+            if (
+                "纪录" in found_categories
+                and "灾难纪录" in text_after_title
+                and "灾难" not in found_categories
+            ):
+                found_categories.insert(found_categories.index("纪录"), "灾难")
             info.category = '/'.join(found_categories)
 
         # 提取“X相关”描述（如“哈利·波特相关高分纪录片”中的“哈利·波特相关”），

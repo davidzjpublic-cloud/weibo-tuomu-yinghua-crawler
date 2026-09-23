@@ -311,6 +311,27 @@ class TestMovieExtractor:
         )
         assert info2.category == "纪录"
 
+    def test_extract_disaster_documentary_series_category(self, extractor):
+        # 回归：灾难纪录剧集（悲剧预言：冷门灾难纪录剧集推荐
+        # → 冷门灾难纪录剧集），“灾难”插到“纪录”前
+        info = extractor.extract(
+            "《悲剧预言：巴西3054航班空难》\n冷门灾难纪录剧集推荐\n全3集 葡语中字\n见平👇 ​​​",
+            "123", "2026-09-23",
+        )
+        assert info is not None
+        assert info.category == "灾难/纪录"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "冷门灾难纪录剧集 全3集" in filename
+
+        # “灾难”只在片名里、类别行无“灾难纪录”连写时不插入，
+        # 类别维持“纪录”（对照：泰坦原文“冷门灾难纪录片推荐”有连写，按规则插入）
+        info2 = extractor.extract(
+            "《泰坦:海门灾难》\n冷门纪录片推荐\n英语中英双字\n见平👇 ​​​",
+            "124", "2026-09-06",
+        )
+        assert info2.category == "纪录"
+
     def test_extract_golden_horse_actress_award(self, extractor):
         # 回归：金马最佳女主角获奖作品（回光奏鸣曲）
         info = extractor.extract(
