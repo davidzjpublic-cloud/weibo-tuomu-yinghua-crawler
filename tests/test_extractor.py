@@ -2796,3 +2796,30 @@ class TestBatch0908Alignment:
             raw_text="《中央公园》\n冷门喜剧动画剧集推荐\n全3季 英语中英双字",
         )
         assert info.generate_filename().startswith("中央公园 Central Park 1-3季 （")
+
+    def test_nbr_award_top5_foreign_films(self):
+        # 一诺千金：美国国家评论协会奖五佳外语片（奖项名带五佳外语片后缀）
+        info = self._extract(
+            "《一诺千金》\n美国国家评论协会奖五佳外语片\n达内兄弟导演高分作品\n"
+            "法语/罗马尼亚语中字\n见平👇 ​​​"
+        )
+        assert info.awards == "美国国家评论协会奖五佳外语片"
+        assert info.language == "法罗马尼亚语"
+        filename = info.generate_filename()
+        assert "达内兄弟导演 美国国家评论协会奖五佳外语片 高分片 法罗马尼亚语中字" in filename
+
+    def test_slash_language_full_form_dedupe(self):
+        # 斜杠组合各段均为“X语”全称时，非末段尾“语”去重：
+        # 法语/罗马尼亚语 → 法罗马尼亚语（与“法/英语→法英语”惯例一致）
+        info = self._extract("《测试片》\n高分电影推荐\n法语/罗马尼亚语中字\n见平👇 ​​​")
+        assert info.language == "法罗马尼亚语"
+
+    def test_film_history_first_descriptor(self):
+        # 快乐的结局：影史首部全程倒放电影（描述性荣誉，随奖项段渲染）
+        info = self._extract(
+            "《快乐的结局》\n奥德里奇·利普斯基导演高分作品\n"
+            "影史首部全程倒放电影\n捷克语中字\n见平👇 ​​​"
+        )
+        assert info.awards == "影史首部全程倒放电影"
+        filename = info.generate_filename()
+        assert "奥德里奇·利普斯基导演 影史首部全程倒放电影 高分片 捷克语中字" in filename

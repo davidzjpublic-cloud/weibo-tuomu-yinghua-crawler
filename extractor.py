@@ -73,14 +73,18 @@ class MovieExtractor:
             return None
         parts = re.split(r'[/、]+', lang_part)
         resolved = []
-        for seg in parts:
+        for i, seg in enumerate(parts):
             if (
                 seg in self._lang_units
                 or seg + '语' in self._lang_units
                 or seg.endswith('语')
             ):
                 # 与 SLASH_REPLACEMENTS 表风格一致：各段照抄原文，
-                # 不把“挪威”补成“挪威语”、“英”补成“英语”
+                # 不把“挪威”补成“挪威语”、“英”补成“英语”；
+                # 非末段的尾“语”去重（法语/罗马尼亚语→法罗马尼亚语，
+                # 与“法/英语→法英语”的基准惯例一致）
+                if i < len(parts) - 1 and len(seg) > 1 and seg.endswith('语'):
+                    seg = seg[:-1]
                 resolved.append(seg)
             else:
                 return None
