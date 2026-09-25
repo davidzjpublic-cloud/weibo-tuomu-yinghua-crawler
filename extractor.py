@@ -599,10 +599,11 @@ class MovieExtractor:
         if producer_match:
             info.producer_tag = producer_match.group(1)
 
-        # 提取“修复版/加长版”版本说明（爱在暹罗：修复版 泰语中字；
-        # 铁血战士：杀戮之王：加长版 英语中英双字），
+        # 提取“修复版/加长版/未删减版”版本说明（爱在暹罗：修复版 泰语中字；
+        # 铁血战士：杀戮之王：加长版 英语中英双字；
+        # 沃伦：未删减版 多语中英双字），
         # 生成文件名时作为独立段落置于类别段之后
-        restore_match = re.search(r'(修复版|加长版)', text_after_title)
+        restore_match = re.search(r'(修复版|加长版|未删减版)', text_after_title)
         if restore_match:
             info.restore_tag = restore_match.group(1)
 

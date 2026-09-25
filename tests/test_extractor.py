@@ -2823,3 +2823,26 @@ class TestBatch0908Alignment:
         assert info.awards == "影史首部全程倒放电影"
         filename = info.generate_filename()
         assert "奥德里奇·利普斯基导演 影史首部全程倒放电影 高分片 捷克语中字" in filename
+
+    def test_0926_batch_alignments(self):
+        # 09-26 批次五项：影史首部动画长片、未删减版、金马最佳改编剧本、
+        # 金马最佳剧情长片、韩国影史百佳电影
+        info = self._extract("《阿赫迈德王子历险记》\n影史首部动画长片\n无对白中字\n见平👇 ​​​")
+        assert info.awards == "影史首部动画长片"
+        assert "影史首部动画长片 无对白中字" in info.generate_filename()
+
+        info = self._extract("《沃伦》\n热门高分战争历史电影推荐\n未删减版 多语中英双字\n见平👇 ​​​")
+        assert info.restore_tag == "未删减版"
+        assert "热门高分战争历史片 未删减版 多语中英双字" in info.generate_filename()
+
+        info = self._extract("《孤味》\n金马最佳改编剧本提名作品\n谢盈萱主演高分电影\n国/闽南语中字\n见平👇 ​​​")
+        assert info.awards == "金马最佳改编剧本提名作品"
+        assert "谢盈萱主演 金马最佳改编剧本提名作品 高分片 国闽南语中字" in info.generate_filename()
+
+        info = self._extract("《月老》\n金马最佳剧情长片提名作品\n王净主演电影\n国语中字\n见平👇 ​​​")
+        assert info.awards == "金马最佳剧情长片提名作品"
+        assert "王净主演 金马最佳剧情长片提名作品 剧情片 国语中字" in info.generate_filename()
+
+        info = self._extract("《雾津》\n韩国影史百佳电影\n韩语中字\n见平👇 ​​​")
+        assert info.awards == "韩国影史百佳电影"
+        assert "韩国影史百佳电影 韩语中字" in info.generate_filename()
