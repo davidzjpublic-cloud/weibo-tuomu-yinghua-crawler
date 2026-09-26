@@ -2846,3 +2846,10 @@ class TestBatch0908Alignment:
         info = self._extract("《雾津》\n韩国影史百佳电影\n韩语中字\n见平👇 ​​​")
         assert info.awards == "韩国影史百佳电影"
         assert "韩国影史百佳电影 韩语中字" in info.generate_filename()
+
+    def test_0927_highfan_hot_compound_rating(self):
+        # 辐射：“高分热门”连写评级（表内已有反向顺序“热门高分”），
+        # 单独命中“高分”“热门”会以空格连接，连写时整体一词
+        info = self._extract("《辐射》\n高分热门动作科幻剧集推荐\n全两季 英语中英双字\n见平👇 ​​​")
+        assert info.rating == "高分热门"
+        assert "高分热门科幻动作剧集 全2季" in info.generate_filename()

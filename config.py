@@ -427,6 +427,7 @@ GENERIC_AWARD_NAME_BLOCKLIST: List[str] = [
 RATING_PATTERNS: List[str] = [
     r'(冷门高分)',
     r'(热门高分)',
+    r'(高分热门)',
     r'(五星满分)',
     r'(高分)(?!原著)',
     r'(热门)',
