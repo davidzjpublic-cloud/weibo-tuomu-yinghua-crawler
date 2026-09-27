@@ -2853,3 +2853,14 @@ class TestBatch0908Alignment:
         info = self._extract("《辐射》\n高分热门动作科幻剧集推荐\n全两季 英语中英双字\n见平👇 ​​​")
         assert info.rating == "高分热门"
         assert "高分热门科幻动作剧集 全2季" in info.generate_filename()
+
+    def test_0928_antiwar_genre(self):
+        # 有史以来最棒的啤酒运送：“主演反战片”的“反战”为类别词，
+        # 紧跟主演名单渲染“反战片”
+        info = self._extract(
+            "《有史以来最棒的啤酒运送》\n扎克·埃夫隆/罗素·克劳/比尔·默瑞主演反战片\n"
+            "英/越南语中英双字\n见平👇 ​​​"
+        )
+        assert info.cast == ["扎克·埃夫隆", "罗素·克劳", "比尔·默瑞"]
+        assert info.category == "反战"
+        assert "比尔·默瑞主演 反战片 英越南语中英双字" in info.generate_filename()
