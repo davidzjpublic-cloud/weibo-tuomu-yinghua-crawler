@@ -2864,3 +2864,23 @@ class TestBatch0908Alignment:
         assert info.cast == ["扎克·埃夫隆", "罗素·克劳", "比尔·默瑞"]
         assert info.category == "反战"
         assert "比尔·默瑞主演 反战片 英越南语中英双字" in info.generate_filename()
+
+    def test_0930_midtext_category_before_adaptation_title(self):
+        # 坏家伙们：类别词“悬疑”在中段“村芳太郎执导悬疑片”，位于改编行
+        # 《坏人们》之前——最后一个》在改编行，旧扫描域（其后文本）漏掉悬疑；
+        # 类别扫描域改为全文去书名号跨度后，中段类别词照常提取
+        info = self._extract(
+            "《坏家伙们》\n松坂庆子野主演 村芳太郎执导悬疑片\n"
+            "改编自松本清张原著《坏人们》\n日语中日双字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.category == "悬疑"
+        assert info.director == "村芳太郎"
+        filename = info.generate_filename()
+        assert "村芳太郎导演 悬疑片 日语中日双字" in filename
+
+        # 对照：片名自带的类别词仍不误入类别（泰坦：海门灾难）
+        info2 = self._extract(
+            "《泰坦:海门灾难》\n冷门纪录片推荐\n英语中英双字\n见平👇 ​​​"
+        )
+        assert info2.category == "纪录"

@@ -517,6 +517,13 @@ class MovieExtractor:
         if last_guillemet_end != -1:
             text_after_title = text[last_guillemet_end + 1:]
 
+        # 类别扫描域：全文去掉所有书名号跨度（外层片名、改编原著名等）。
+        # 只用“最后一个》之后”会漏掉中段类别词（坏家伙们：
+        # “村芳太郎执导悬疑片”在改编行《坏人们》之前，旧域扫不到“悬疑”）；
+        # 而全照抄全文会把片名里的类别词（泰坦：海门灾难的“灾难”）误入，
+        # 去《》跨度后两者兼得（与 is_non_movie_content 的处理同款）
+        text_for_category = re.sub(r'《[^》]*》', '', text)
+
         # 人物传记类描述：“弗兰茨·卡夫卡传记电影/片”整体作为类别，
         # 显示为“弗兰茨·卡夫卡传记片”；人名须含“·”且不含角色/评级词，
         # 避免“主演高分传记片”这类评级+类别组合误挂人名前缀
@@ -531,7 +538,7 @@ class MovieExtractor:
 
         found_categories = []
         for cat in self.categories:
-            if cat in text_after_title:
+            if cat in text_for_category:
                 # 避免 genre="纪录片" 时 category 重复提取"纪录"
                 if info.genre == "纪录片" and cat == "纪录":
                     continue
@@ -546,7 +553,7 @@ class MovieExtractor:
             # （此处 genre 尚未判定，不能以 genre==“短片”为条件）
             if (
                 "短片" in found_categories
-                and "动画" in text_after_title
+                and "动画" in text_for_category
                 and "动画" not in found_categories
             ):
                 found_categories.insert(found_categories.index("短片"), "动画")
@@ -554,7 +561,7 @@ class MovieExtractor:
             # 以“动画纪录片”连写为条件，避免其他位置提及“动画”误入类别
             if (
                 "纪录" in found_categories
-                and "动画纪录片" in text_after_title
+                and "动画纪录片" in text_for_category
                 and "动画" not in found_categories
             ):
                 found_categories.insert(found_categories.index("纪录"), "动画")
@@ -562,7 +569,7 @@ class MovieExtractor:
             # 以“艺术纪录”连写为条件，避免其他位置提及“艺术”误入类别
             if (
                 "纪录" in found_categories
-                and "艺术纪录" in text_after_title
+                and "艺术纪录" in text_for_category
                 and "艺术" not in found_categories
             ):
                 found_categories.insert(found_categories.index("纪录"), "艺术")
@@ -570,7 +577,7 @@ class MovieExtractor:
             # 以“灾难纪录”连写为条件，避免片名自带“灾难”（泰坦：海门灾难）误入类别
             if (
                 "纪录" in found_categories
-                and "灾难纪录" in text_after_title
+                and "灾难纪录" in text_for_category
                 and "灾难" not in found_categories
             ):
                 found_categories.insert(found_categories.index("纪录"), "灾难")
