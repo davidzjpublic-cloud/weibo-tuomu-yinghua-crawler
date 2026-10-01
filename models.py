@@ -55,6 +55,9 @@ class MovieInfo:
     # 综艺“X/Y常驻”常驻嘉宾（心灵灯塔：星野源/若林正恭常驻），按角色段位置渲染
     regulars: List[str] = field(default_factory=list)
     regulars_pos: Optional[int] = None
+    # “X配音”配音演员（宝可梦礼宾部：能年玲奈配音高分动画剧集），按角色段位置渲染
+    voice_cast: List[str] = field(default_factory=list)
+    voice_pos: Optional[int] = None
     # “修复版”等版本说明（爱在暹罗），独立段落置于类别段之后、季集/语言之前
     restore_tag: Optional[str] = None
     rating: Optional[str] = None
@@ -213,6 +216,22 @@ class MovieInfo:
                 reg_suffix = '等常驻' if len(regulars_clean) > 4 else '常驻'
                 pos = self.regulars_pos if self.regulars_pos is not None else 9999
                 ordered_parts.append((pos, f"{safe_filename(reg_str)}{reg_suffix}"))
+
+        if self.voice_cast:
+            invalid_cast_keywords = FILENAME_INVALID_CAST_KEYWORDS
+            voice_clean = [
+                c for c in self.voice_cast
+                if c not in combined_names
+                and len(c) < 15
+                and c not in invalid_cast_keywords
+                and not c.isdigit()
+            ]
+            if voice_clean:
+                # 与主演/常驻同款截断规则（超过 4 人取前 4 加“等”）
+                voice_str = '、'.join(voice_clean[:4])
+                voice_suffix = '等配音' if len(voice_clean) > 4 else '配音'
+                pos = self.voice_pos if self.voice_pos is not None else 9999
+                ordered_parts.append((pos, f"{safe_filename(voice_str)}{voice_suffix}"))
 
         ordered_parts.sort(key=lambda x: x[0])
         return ordered_parts

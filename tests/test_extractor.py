@@ -2884,3 +2884,24 @@ class TestBatch0908Alignment:
             "《泰坦:海门灾难》\n冷门纪录片推荐\n英语中英双字\n见平👇 ​​​"
         )
         assert info2.category == "纪录"
+
+    def test_1002_voice_cast_credit(self):
+        # 宝可梦礼宾部：“能年玲奈配音高分动画剧集”的配音署名按角色段
+        # 位置渲染为“能年玲奈配音”；“国语配音”“原声配音”等声音说明
+        # 词不是人名，不产生配音段
+        info = self._extract(
+            "《宝可梦礼宾部》\n能年玲奈配音高分动画剧集\n"
+            "全两季 国日双语中字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.voice_cast == ["能年玲奈"]
+        assert info.genre == "动画剧集"
+        filename = info.generate_filename()
+        assert "能年玲奈配音 高分动画剧集 全2季" in filename
+
+        # 声音说明词不误判为人名
+        info2 = self._extract("《测试动画》\n高分动画\n国语配音 中字\n见平👇 ​​​")
+        assert info2 is not None
+        assert info2.voice_cast == []
+        info3 = self._extract("《测试动画》\n高分动画\n原声配音 英语中字\n见平👇 ​​​")
+        assert info3.voice_cast == []

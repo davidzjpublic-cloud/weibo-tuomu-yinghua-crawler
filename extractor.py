@@ -511,6 +511,27 @@ class MovieExtractor:
                 info.regulars_pos = m.start()
                 break
 
+        # 提取“X配音”配音演员（宝可梦礼宾部：能年玲奈配音高分动画剧集），
+        # 按角色段位置渲染为“能年玲奈配音”；
+        # “国语配音”“原声配音”“中文配音”等声音说明词不是人名，跳过
+        voice_block = INVALID_CAST_KEYWORDS + ['语', '字', '原声', '双语', '旁白', '中文']
+        for m in re.finditer(
+            r'([^《》\n\s]{2,15}(?:\s*[/、，,]\s*[^《》\n\s]{2,15})*)\s*配音',
+            text,
+        ):
+            raw = m.group(1).strip()
+            voices = [
+                c.strip()
+                for c in re.split(r'[/、，,\s]+', raw)
+                if c.strip() and 1 < len(c.strip()) < 15
+                and not any(kw in c for kw in voice_block)
+                and not c.isdigit()
+            ]
+            if voices:
+                info.voice_cast = voices
+                info.voice_pos = m.start()
+                break
+
         # 提取类别 - 只从最后一个书名号后的文本中提取，避免标题关键词混入
         text_after_title = text
         last_guillemet_end = text.rfind('》')
