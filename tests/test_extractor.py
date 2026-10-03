@@ -2951,3 +2951,29 @@ class TestBatch0908Alignment:
             raw_text="《律界战争》\n多米尼克·韦斯特/西耶娜·米勒主演惊悚剧集\n首播至第一集",
         )
         assert info4.generate_filename().startswith("律界战争 War Season 1 2026 （")
+
+    def test_1004_batch_alignments(self):
+        # 10-04 批次两项：「旅行」类别词（与「旅游」并列）、「英字生肉」字幕段
+        info = self._extract(
+            "《安东尼·波罗夫斯基的世界最佳之旅》\n冷门旅行纪录剧集推荐\n"
+            "全4集 英语中字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.category == "旅行/纪录"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "冷门旅行纪录剧集 全4集" in filename
+        # 「旅游」既有类别不受影响
+        info_t = self._extract("《测试片》\n冷门旅游纪录剧集推荐\n英语中字\n见平👇")
+        assert info_t.category == "旅游/纪录"
+
+        # 病院尸录：“已出英字生肉”——英文字幕生肉，无中文语言词，
+        # 作为独立字幕段置于类型段之后
+        info2 = self._extract(
+            "《病院尸录》\n最新热门恐怖电影推荐\n已出英字生肉\n见平👇 ​​​"
+        )
+        assert info2 is not None
+        assert info2.language is None
+        assert info2.subtitle == "英字生肉"
+        filename2 = info2.generate_filename()
+        assert "热门恐怖片 英字生肉" in filename2

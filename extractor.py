@@ -903,8 +903,10 @@ class MovieExtractor:
                 info.language = lang_match.group(1)
                 info.subtitle = lang_match.group(2)
             else:
+                # “英字生肉”（病院尸录：“已出英字生肉”）——英文字幕生肉，
+                # 不带中文语言词，作为独立字幕段显示
                 fallback = re.search(
-                    r'(中英双语|中英双字|中文字幕|官方中字|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字)',
+                    r'(中英双语|中英双字|中文字幕|官方中字|中字|双语字幕|中英字幕|内嵌中字|外挂中字|中日双字|英字生肉)',
                     text,
                 )
                 if fallback:
