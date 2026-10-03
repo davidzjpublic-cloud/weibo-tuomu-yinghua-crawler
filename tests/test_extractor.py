@@ -2905,3 +2905,49 @@ class TestBatch0908Alignment:
         assert info2.voice_cast == []
         info3 = self._extract("《测试动画》\n高分动画\n原声配音 英语中字\n见平👇 ​​​")
         assert info3.voice_cast == []
+
+    def test_1003_batch_alignments(self):
+        # 10-03 批次三项：高画质版版本说明、全集+SP 季集段、
+        # “Season N”后缀在全N集打包时去除（2026-10-03 基准统一）
+        info = self._extract(
+            "《风花》\n浅野忠信/小泉今日子主演电影\n相米慎二导演作品\n"
+            "高画质版中日双字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.restore_tag == "高画质版"
+        filename = info.generate_filename()
+        assert "相米慎二导演 高画质版 中日双字" in filename
+        # “高画质版”是版本说明，不得被“X版”版本署名截去一半
+        assert info.version_credit is None
+
+        info2 = self._extract(
+            "《澪之料理帖》\n黑木华主演高分美食剧集\n全集+SP 日语中日双字\n见平👇 ​​​"
+        )
+        assert info2 is not None
+        assert info2.season_extra == "全集+SP"
+        assert info2.episodes is None
+        filename2 = info2.generate_filename()
+        assert "高分美食剧集 全集+SP 日语中日双字" in filename2
+        # “➕”全角加号同样归一为半角
+        info2b = self._extract("《测试剧》\n高分剧集\n全集➕SP 日语中字\n见平👇")
+        assert info2b.season_extra == "全集+SP"
+
+        # 杀戮人机“Murderbot Season 1”+全10集——季词在完整打包集数前
+        # 没有信息量，整体去除；对照：仅“首播至第X集”连载状态时保留
+        # （律界战争“War Season 1”）
+        info3 = MovieInfo(
+            chinese_name="杀戮人机",
+            foreign_name="Murderbot Season 1",
+            year=2025,
+            episodes=10,
+            raw_text="《杀戮人机》\n亚历山大·斯卡斯加德主演高分动作科幻剧集\n全10集 英语中英双字",
+        )
+        assert info3.generate_filename().startswith("杀戮人机 Murderbot 2025 （")
+        info4 = MovieInfo(
+            chinese_name="律界战争",
+            foreign_name="War Season 1",
+            year=2026,
+            season_extra="首播至第一集",
+            raw_text="《律界战争》\n多米尼克·韦斯特/西耶娜·米勒主演惊悚剧集\n首播至第一集",
+        )
+        assert info4.generate_filename().startswith("律界战争 War Season 1 2026 （")

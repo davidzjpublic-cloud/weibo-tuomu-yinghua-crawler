@@ -288,15 +288,23 @@ class MovieInfo:
 
         if self.foreign_name:
             foreign = safe_filename(self.foreign_name)
-            if season_range:
-                # 俄文季数词保留词干、去掉末尾数字，与“1-N季”合并为
-                # “Сезон 1-N季”（叶卡捷琳娜大帝，语料既有惯例）；
-                # 英文“Season N”季词在“1-N季”前没有信息量，整个去除
+            # 拉丁字母季数词后缀的去除条件：标题拆出的“1-N季”区间，
+            # 或正文有“全N集”打包集数（杀戮人机“Season 1”+全10集）——
+            # 季词在完整季/集信息前没有信息量；仅“首播至第X集”的连载状态
+            # 不算（律界战争“War Season 1”保留）
+            if season_range or self.episodes:
+                if season_range:
+                    # 俄文季数词保留词干、去掉末尾数字，与“1-N季”合并为
+                    # “Сезон 1-N季”（叶卡捷琳娜大帝，语料既有惯例）
+                    foreign = re.sub(r'Сезон\s*\d+\s*$', 'Сезон', foreign).rstrip()
+                else:
+                    # 无区间可合并时俄文季词同样整体去除
+                    foreign = re.sub(r'\s*Сезон\s*\d+\s*$', '', foreign).rstrip()
+                # 英文“Season N”季词在完整季/集信息前没有信息量，整个去除
                 # （马尔科姆的一家/中央公园，2026-09-23 基准统一）
-                foreign = re.sub(r'Сезон\s*\d+\s*$', 'Сезон', foreign).rstrip()
                 foreign = re.sub(r'\s*Season\s*\d+\s*$', '', foreign).rstrip()
                 # 其余拉丁字母季数词后缀整体去除（占领区：“Okkupert Sesong 1”
-                # 全季打包→“Okkupert”，季词在“1-N季”前没有信息量）
+                # 全季打包→“Okkupert”，季词在完整季/集信息前没有信息量）
                 foreign = re.sub(
                     r'\s*(?:Sesong|Saison|Staffel|Stagione|Temporada|Sezon[ao]?'
                     r'|Sezóna|Évad|Kausi|Hooaeg)\s*\d+\s*$',

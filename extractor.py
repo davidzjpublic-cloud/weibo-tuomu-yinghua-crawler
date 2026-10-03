@@ -627,11 +627,11 @@ class MovieExtractor:
         if producer_match:
             info.producer_tag = producer_match.group(1)
 
-        # 提取“修复版/加长版/未删减版”版本说明（爱在暹罗：修复版 泰语中字；
+        # 提取“修复版/加长版/未删减版/高画质版”版本说明（爱在暹罗：修复版 泰语中字；
         # 铁血战士：杀戮之王：加长版 英语中英双字；
-        # 沃伦：未删减版 多语中英双字），
+        # 沃伦：未删减版 多语中英双字；风花：高画质版中日双字），
         # 生成文件名时作为独立段落置于类别段之后
-        restore_match = re.search(r'(修复版|加长版|未删减版)', text_after_title)
+        restore_match = re.search(r'(修复版|加长版|未删减版|高画质版)', text_after_title)
         if restore_match:
             info.restore_tag = restore_match.group(1)
 
@@ -662,7 +662,7 @@ class MovieExtractor:
             if any(
                 kw in credit
                 for kw in (
-                    '完整', '修复', '高清', '原声', '中文', '国语', '重制',
+                    '完整', '修复', '高清', '高画质', '原声', '中文', '国语', '重制',
                     '蓝光', '加长', '终极', '未删', '正片', '纯享', '黑白',
                     '彩色', '精修', '真人', '剧场', '电影', '动画', '纪录',
                     '导演', '编剧', '主演', '出演', '改编', '语', '字', '版',
@@ -977,6 +977,9 @@ class MovieExtractor:
             r'(全\d+部)',
             r'(全\d+季\+番外\+花絮)',
             r'(全\d+季\+电影)',
+            # “全集+SP”无集数计数的全集打包（澪之料理帖：全集+SP 日语中日双字），
+            # 加号统一为半角，作为季集段整体显示
+            r'(全集(?:\+|➕)(?:SP(?![A-Za-z])|[^\s，。]{1,6}))',
             # “前N季+第X季XX篇”多季连看（晚酌的流派：前4季+第五季夏篇全10集）
             r'(前\d+季\+第[一二两三四五六七八九十\d]+季[^，。\s\n全]{0,8})',
             r'(第[一二两三四五六七八九十\d]+季(?:首播至第[一二两三四五六七八九十\d]+集)?(?:\s+含中字(?:前|第)[一二两三四五六七八九十\d]+季|\s+含[^\n，。:：]{0,8}?第[一二两三四五六七八九十\d]+季)?)',
@@ -992,8 +995,8 @@ class MovieExtractor:
                     info.season_extra = captured
                     break
                 # 仅当捕获到除“第X季”之外的附加信息时才使用
-                if '首播' in captured or '含' in captured or '番外' in captured or '+电影' in captured or captured.startswith('前'):
-                    info.season_extra = captured.replace('\n', ' ')
+                if '首播' in captured or '含' in captured or '番外' in captured or '+电影' in captured or captured.startswith('前') or captured.startswith('全集'):
+                    info.season_extra = captured.replace('\n', ' ').replace('➕', '+')
                     # “含中英双字第一季”这类含语言/字幕的附带季说明，
                     # 语言已单独提取，改写为“含第一季”（“含中字第X季”惯用语原样保留）
                     info.season_extra = re.sub(
