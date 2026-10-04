@@ -402,7 +402,9 @@ class MovieExtractor:
         if not info.writer:
             writer_candidates = []
             writer_positions = []
-            for m in re.finditer(r'([^《》\n\s]{2,15}?)编剧', text):
+            # “编剧工会奖”是奖项主体（妖惑心计：美国编剧工会奖限定剧最佳剧本
+            # 提名作品），其中的“编剧”不是角色词，负向前瞻排除
+            for m in re.finditer(r'([^《》\n\s]{2,15}?)编剧(?!工会)', text):
                 writer_candidates.append(m.group(1).strip())
                 writer_positions.append(m.start())
             for m in re.finditer(r'编剧[:：]?\s*([^《》\n,，/、\s]{2,15})', text):

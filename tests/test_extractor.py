@@ -2977,3 +2977,43 @@ class TestBatch0908Alignment:
         assert info2.subtitle == "英字生肉"
         filename2 = info2.generate_filename()
         assert "热门恐怖片 英字生肉" in filename2
+
+    def test_1005_batch_alignments(self):
+        # 10-05 批次三项：「科普」类别词、「影史首部」国别前缀、
+        # 编剧工会奖完整细分 +「编剧工会」不作为编剧角色词
+        info = self._extract(
+            "《毒从口入:食物的丑陋真相》\n科普纪录片推荐\n英语中字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.category == "科普/纪录"
+        assert info.genre == "纪录片"
+        filename = info.generate_filename()
+        assert "科普纪录片 英语中字" in filename
+
+        info2 = self._extract(
+            "《但丁的地狱》\n意大利影史首部电影长片\n默片 中文字幕\n见平👇 ​​​"
+        )
+        assert info2 is not None
+        assert info2.awards == "意大利影史首部电影长片"
+        assert info2.language == "默片"
+        assert info2.subtitle == "中文字幕"
+        # 无国别前缀的既有形态不受影响
+        info2b = self._extract("《测试片》\n影史首部全程倒放电影\n捷克语中字\n见平👇")
+        assert info2b.awards == "影史首部全程倒放电影"
+
+        # 妖惑心计：“美国编剧工会奖限定剧最佳剧本提名作品”整段提取，
+        # “美国编剧”不得被当作编剧人名
+        info3 = self._extract(
+            "《妖惑心计》\n美国编剧工会奖限定剧最佳剧本提名作品\n"
+            "朱丽安·摩尔主演剧集\n全5集 英语中英双字\n见平👇 ​​​"
+        )
+        assert info3 is not None
+        assert info3.writer is None
+        assert info3.awards == "美国编剧工会奖限定剧最佳剧本提名作品"
+        filename3 = info3.generate_filename()
+        assert "朱丽安·摩尔主演 美国编剧工会奖限定剧最佳剧本提名作品" in filename3
+        # “美国编剧”不得作为独立角色段出现（奖项名内的“美国编剧工”不受影响）
+        assert "美国编剧 " not in filename3
+        # 普通编剧角色提取不受影响
+        info3b = self._extract("《测试片》\n朴赞郁编剧电影\n韩语中字\n见平👇")
+        assert info3b.writer == "朴赞郁"
