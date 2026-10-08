@@ -16,7 +16,7 @@ def make_lobster(tmp_path):
         target_date="2026-08-31",
         output_json=str(tmp_path / "results_2026-08-31.json"),
         output_txt=str(tmp_path / "filenames_2026-08-31.txt"),
-        processed_file=str(tmp_path / "processed.json"),
+        saved_file=str(tmp_path / "saved.json"),
     ), crawler
 
 
@@ -180,6 +180,43 @@ class TestSaveToQuarkImageTarget:
             "5341934461913089_img_1.jpg",
             "folder_fid",
         )
+
+    def test_poster_queued_when_listing_fails(self, tmp_path):
+        # 列目录定位子文件夹失败（网络重试耗尽）时，配图不得误传根目录，
+        # 应转入待补传队列并记录 folder_name 供重定位（会见波尔布特，2026-10-08）
+        lobster, crawler = make_lobster(tmp_path)
+        final_name = (
+            "会见波尔布特 Rendez-vous avec Pol Pot 2024 "
+            "（潘礼德导演 亚洲电影大奖最佳导演提名作品 历史片 豆瓣7.2）"
+        )
+        movie = MagicMock()
+        movie.quark_fid = "share_fid"
+        movie.chinese_name = "会见波尔布特"
+        movie.quark_file_name = "会见波尔布特2024"
+        movie.generate_filename.return_value = final_name
+
+        client = crawler.quark_client
+        client.find_or_create_dir.return_value = "root_fid"
+        client.list_all_my_files.side_effect = [
+            [],  # 冲突检查：无同名项
+            RuntimeError("列出目录失败 (pdir_fid=root_fid, page=1): None"),
+        ]
+        client.save_and_rename.return_value = [{"renamed": True}]
+        lobster._upload_image_with_retry = MagicMock()
+
+        ok = lobster._save_to_quark(
+            "https://pan.quark.cn/s/abc",
+            [movie],
+            "5351456907725616",
+            ["https://wx2.sinaimg.cn/large/abc.jpg"],
+        )
+
+        assert ok is True  # 转存本身成功，配图是附属品
+        lobster._upload_image_with_retry.assert_not_called()  # 不误传到根目录
+        entries = lobster._load_failed_images()
+        assert len(entries) == 1
+        assert entries[0]["image_name"] == "5351456907725616_img_1.jpg"
+        assert entries[0]["folder_name"] == final_name
 
 
 class TestUploadImageWithRetry:

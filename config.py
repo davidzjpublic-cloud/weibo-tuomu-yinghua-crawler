@@ -15,7 +15,7 @@ DEFAULT_SHORTLINK_TIMEOUT = 10
 # 输出文件名模板
 OUTPUT_JSON_TEMPLATE = "output/results_{date}.json"
 OUTPUT_TXT_TEMPLATE = "output/filenames_{date}.txt"
-DEFAULT_PROCESSED_FILE = "processed_weibo.json"
+DEFAULT_SAVED_FILE = "saved_weibo.json"
 DEFAULT_CONFIG_FILE = "config.json"
 DEFAULT_LOG_FILE = "lobster.log"
 

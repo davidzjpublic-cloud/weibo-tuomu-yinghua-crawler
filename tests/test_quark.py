@@ -219,6 +219,24 @@ class TestQuarkClient:
         files = quark_client.list_share_files("https://pan.quark.cn/s/abc123")
         assert files == []
 
+    def test_list_all_my_files_strict(self, quark_client):
+        # strict=True：请求失败（网络重试耗尽返回 None）须抛异常，
+        # 供调用方区分「列目录失败」与「目录为空/无匹配项」
+        # （会见波尔布特配图误传根目录，2026-10-08）
+        quark_client._drive_request = MagicMock(return_value=None)
+        with pytest.raises(RuntimeError):
+            quark_client.list_all_my_files("fid123", strict=True)
+        # 默认非 strict：失败静默返回空列表（既有行为不变）
+        assert quark_client.list_all_my_files("fid123") == []
+
+        # strict 下正常返回不受影响
+        quark_client._drive_request = MagicMock(return_value={
+            "code": 0,
+            "data": {"list": [{"fid": "f1", "file_name": "片名", "file_type": 0}]},
+        })
+        files = quark_client.list_all_my_files("fid123", strict=True)
+        assert files[0]["file_name"] == "片名"
+
     def test_get_first_file_name(self, quark_client):
         quark_client.list_share_files = MagicMock(
             return_value=[{"file_name": "贝尔法斯特天堂路2026"}]

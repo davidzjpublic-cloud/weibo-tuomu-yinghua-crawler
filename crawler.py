@@ -60,7 +60,7 @@ class WeiboCrawler:
         self.uid = uid
         self.cookie = cookie or ""
         self.user_agents = user_agents or USER_AGENTS
-        self.processed_ids: Set[str] = set()
+        self.saved_ids: Set[str] = set()
         self.quark_client = quark.QuarkClient(quark_cookie or "")
 
         self._init_session()
@@ -182,32 +182,32 @@ class WeiboCrawler:
 
         return None
 
-    def load_processed_ids(self, path: str = "processed_weibo.json") -> Set[str]:
-        """加载已处理微博 ID 集合。"""
+    def load_saved_ids(self, path: str = "saved_weibo.json") -> Set[str]:
+        """加载已转存微博 ID 集合。"""
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.processed_ids = set(str(x) for x in data)
+                self.saved_ids = set(str(x) for x in data)
             except Exception as e:
-                logger.error(f"加载已处理 ID 失败: {e}")
-                self.processed_ids = set()
+                logger.error(f"加载已转存 ID 失败: {e}")
+                self.saved_ids = set()
         else:
-            self.processed_ids = set()
-        return self.processed_ids
+            self.saved_ids = set()
+        return self.saved_ids
 
-    def save_processed_ids(self, path: str = "processed_weibo.json") -> None:
-        """保存已处理微博 ID 集合。"""
+    def save_saved_ids(self, path: str = "saved_weibo.json") -> None:
+        """保存已转存微博 ID 集合。"""
         try:
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(sorted(self.processed_ids), f, ensure_ascii=False, indent=2)
-            logger.debug(f"已处理 ID 已保存: {path}")
+                json.dump(sorted(self.saved_ids), f, ensure_ascii=False, indent=2)
+            logger.debug(f"已转存 ID 已保存: {path}")
         except Exception as e:
-            logger.error(f"保存已处理 ID 失败: {e}")
+            logger.error(f"保存已转存 ID 失败: {e}")
 
-    def add_processed_id(self, weibo_id: str) -> None:
-        """在内存中添加已处理 ID（不自动持久化）。"""
-        self.processed_ids.add(str(weibo_id))
+    def add_saved_id(self, weibo_id: str) -> None:
+        """在内存中添加已转存 ID（不自动持久化）。"""
+        self.saved_ids.add(str(weibo_id))
 
     def get_weibo_list(self, page: int = 1) -> List[Dict]:
         """获取微博列表，双 API 回退。"""

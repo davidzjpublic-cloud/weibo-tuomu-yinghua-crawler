@@ -34,7 +34,7 @@ python main.py --target-date 2026-08-18 --save
 | --- | --- |
 | `--target-date YYYY-MM-DD` | 抓取哪一天的博文，默认昨天；输出文件名中的日期以它为准 |
 | `--save` | 转存资源到夸克网盘并按生成文件名改名 |
-| `--skip-processed` | 跳过已处理过的微博（默认不跳过，重跑会覆盖） |
+| `--skip-saved` | 跳过已转存成功的微博（默认不跳过；`saved_weibo.json` 标记由 `--save` 运行写入） |
 
 ## 测试
 

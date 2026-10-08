@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -22,7 +23,7 @@ from config import (
     DEFAULT_CONFIG_FILE,
     DEFAULT_LOG_FILE,
     DEFAULT_MAX_PAGES,
-    DEFAULT_PROCESSED_FILE,
+    DEFAULT_SAVED_FILE,
     DEFAULT_UID,
     OUTPUT_JSON_TEMPLATE,
     OUTPUT_TXT_TEMPLATE,
@@ -73,7 +74,11 @@ def setup_logging(verbose: bool = False) -> None:
     警告/错误，--verbose 时恢复完整输出（含 DEBUG 诊断信息）。
     """
     log_path = PROJECT_ROOT / DEFAULT_LOG_FILE
-    file_handler = logging.FileHandler(log_path, encoding='utf-8')
+    # 日志轮转：单文件 10MB、最多 3 个备份
+    # （此前 FileHandler 无限追加，两年不到已积到 197MB）
+    file_handler = RotatingFileHandler(
+        log_path, maxBytes=10 * 1024 * 1024, backupCount=3, encoding='utf-8'
+    )
     console_handler = logging.StreamHandler(sys.stdout)
     if verbose:
         root_level = logging.DEBUG
@@ -115,9 +120,9 @@ def parse_args() -> argparse.Namespace:
         help=f"Cookie 配置文件路径（默认: {PROJECT_ROOT / DEFAULT_CONFIG_FILE}）",
     )
     parser.add_argument(
-        "--processed-file",
-        default=str(PROJECT_ROOT / DEFAULT_PROCESSED_FILE),
-        help=f"已处理微博 ID 记录文件（默认: {PROJECT_ROOT / DEFAULT_PROCESSED_FILE}）",
+        "--saved-file",
+        default=str(PROJECT_ROOT / DEFAULT_SAVED_FILE),
+        help=f"已转存微博 ID 记录文件（默认: {PROJECT_ROOT / DEFAULT_SAVED_FILE}）",
     )
     parser.add_argument(
         "--output-json",
@@ -130,14 +135,14 @@ def parse_args() -> argparse.Namespace:
         help="文件名列表输出路径（默认: output/filenames_目标日期.txt）",
     )
     parser.add_argument(
-        "--skip-processed",
+        "--skip-saved",
         action="store_true",
-        help="跳过已处理微博，并将新处理的微博写入 processed_weibo.json（默认不跳过、不写入）",
+        help="跳过 saved_weibo.json 中已记录的微博（默认不跳过；标记由 --save 运行写入）",
     )
     parser.add_argument(
         "--save",
         action="store_true",
-        help="启用夸克网盘转存与重命名（默认只输出文件名到 TXT/JSON）",
+        help="启用夸克网盘转存与重命名，并将转存成功的微博写入 saved_weibo.json（默认只输出文件名到 TXT/JSON）",
     )
     parser.add_argument(
         "--save-dir",
@@ -175,7 +180,7 @@ def parse_args() -> argparse.Namespace:
 
     # 若用户提供相对路径，也基于项目根目录解析
     args.config = str(PROJECT_ROOT / args.config)
-    args.processed_file = str(PROJECT_ROOT / args.processed_file)
+    args.saved_file = str(PROJECT_ROOT / args.saved_file)
     if not os.path.isabs(args.output_json):
         args.output_json = str(PROJECT_ROOT / args.output_json)
     if not os.path.isabs(args.output_txt):
@@ -194,8 +199,8 @@ class Lobster:
         target_date: str,
         output_json: str,
         output_txt: str,
-        processed_file: str,
-        skip_processed: bool = False,
+        saved_file: str,
+        skip_saved: bool = False,
         save_enabled: bool = False,
         save_dir: str = "来自：分享/【拓临】",
     ) -> None:
@@ -205,8 +210,8 @@ class Lobster:
         self.target_date = target_date
         self.output_json = output_json
         self.output_txt = output_txt
-        self.processed_file = processed_file
-        self.skip_processed = skip_processed
+        self.saved_file = saved_file
+        self.skip_saved = skip_saved
         self.save_enabled = save_enabled
         self.save_dir = save_dir
         self.results: List[MovieInfo] = []
@@ -214,12 +219,12 @@ class Lobster:
         # 本次运行已转存成功的文件数（用于控制台逐条带序号回显）
         self.transfer_count = 0
 
-        # 加载已处理 ID（未启用 --skip-processed 时仅用于展示，不用于跳过）
-        self.crawler.load_processed_ids(processed_file)
-        if self.skip_processed:
-            logging.info("已启用 --skip-processed：跳过已处理微博")
+        # 加载已转存 ID（未启用 --skip-saved 时仅用于展示，不用于跳过）
+        self.crawler.load_saved_ids(saved_file)
+        if self.skip_saved:
+            logging.info("已启用 --skip-saved：跳过已转存微博")
         else:
-            logging.info("未启用 --skip-processed：不跳过已处理微博")
+            logging.info("未启用 --skip-saved：不跳过已转存微博")
 
     def process_weibo(self, weibo: Dict) -> List[MovieInfo]:
         """处理单条微博，返回该微博下所有夸克文件对应的结果列表。"""
@@ -229,8 +234,8 @@ class Lobster:
             logging.debug("微博 ID 为空，跳过")
             return []
 
-        if self.skip_processed and weibo_id in self.crawler.processed_ids:
-            logging.debug(f"跳过已处理微博: {weibo_id}")
+        if self.skip_saved and weibo_id in self.crawler.saved_ids:
+            logging.debug(f"跳过已转存微博: {weibo_id}")
             return []
 
         if weibo_id in self.seen_weibo_ids:
@@ -348,6 +353,7 @@ class Lobster:
                 supervisor=base_info.supervisor,
                 writer=base_info.writer,
                 cast=base_info.cast,
+                cast_role_word=base_info.cast_role_word,
                 language=base_info.language,
                 subtitle=base_info.subtitle,
                 genre=base_info.genre,
@@ -396,16 +402,18 @@ class Lobster:
             for r in results:
                 r.saved = saved_any and bool(r.quark_fid)
 
-        # 仅当找到夸克链接时才标记为已处理并保存（调试模式下不写入）
-        # 如果启用了转存但未实际转存成功，则保留到下次重试
-        if self.save_enabled and not saved_any:
-            logging.warning(f"微博 {weibo_id} 本次未成功转存，暂不标记为已处理")
+        # 标记与 --skip-saved 解耦：带 --save 运行且转存成功即写入
+        # saved_weibo.json（2026-10-08 前旧逻辑只有 --skip-processed 才持久化，
+        # 夜间跑批若不带它 → 零标记，次日补转全量重跑）；--skip-saved
+        # 只负责跳过已标记微博。不带 --save 的验证运行不标记
+        if not self.save_enabled:
+            logging.debug("未启用 --save：不写入 saved_weibo.json")
+        elif not saved_any:
+            # 转存未成功，保留到下次重试
+            logging.warning(f"微博 {weibo_id} 本次未成功转存，暂不标记为已转存")
         else:
-            self.crawler.add_processed_id(weibo_id)
-            if self.skip_processed:
-                self.crawler.save_processed_ids(self.processed_file)
-            else:
-                logging.debug("未启用 --skip-processed：不写入 processed_weibo.json")
+            self.crawler.add_saved_id(weibo_id)
+            self.crawler.save_saved_ids(self.saved_file)
 
         # 完成一条微博后在 CLI 回显最终形成的完整文件名；
         # 「生成结果」日志被精简过滤器拦截，控制台看不到。
@@ -475,7 +483,9 @@ class Lobster:
             conflict_names.add(image_name)
 
         # 删除目标目录中同名的文件/文件夹
-        children = client.list_all_my_files(target_fid, size=100)
+        # （strict：列目录失败即抛异常 → 本微博转存失败待重试，
+        # 不能在看不见同名项的情况下盲目转存出重复文件）
+        children = client.list_all_my_files(target_fid, size=100, strict=True)
         conflicts = [
             child for child in children
             if html.unescape(child.get("file_name", "")) in conflict_names
@@ -518,31 +528,49 @@ class Lobster:
                 final_names.add(name.replace("/", "／"))
             image_target_fid = target_fid
             image_target_name = None
-            for child in client.list_all_my_files(target_fid, size=100):
-                if (
-                    html.unescape(child.get("file_name", "")) in final_names
-                    and child.get("file_type") == 0
-                ):
-                    image_target_fid = child["fid"]
-                    image_target_name = html.unescape(child.get("file_name", ""))
-                    logging.debug(f"微博图片将上传到子文件夹: {child.get('file_name')}")
-                    break
-
-            # 配图是附属品：下载/上传失败只告警并转入待补传队列，不影响已完成的
-            # 转存结果，更不能中断整个运行（曾因网络瞬断在这里炸掉整晚批次）
-            img_fid = self._upload_image_with_retry(
-                first_url, image_name, image_target_fid
-            )
-            if img_fid:
-                logging.info(f"微博图片上传成功: {image_name} (fid={img_fid})")
-            else:
-                logging.warning(f"微博图片多次失败，转入待补传队列: {image_name}")
+            try:
+                children = client.list_all_my_files(target_fid, size=100, strict=True)
+            except RuntimeError as e:
+                # 列目录失败（网络重试耗尽）时不能把配图误传到根目录
+                # （会见波尔布特，2026-10-08：改名单目录超时 → 配图落根目录）：
+                # 转入待补传队列，由本运行末尾/后续运行按 folder_name 重新定位
+                logging.warning(f"列目录定位配图子文件夹失败，转入待补传队列: {e}")
                 self._record_failed_image({
                     "image_url": first_url,
                     "image_name": image_name,
                     "save_dir": self.save_dir,
-                    "folder_name": image_target_name,
+                    "folder_name": (
+                        html.unescape(items[0]["final_name"]).replace("/", "／")
+                        if items else None
+                    ),
                 })
+                children = None
+            if children is not None:
+                for child in children:
+                    if (
+                        html.unescape(child.get("file_name", "")) in final_names
+                        and child.get("file_type") == 0
+                    ):
+                        image_target_fid = child["fid"]
+                        image_target_name = html.unescape(child.get("file_name", ""))
+                        logging.debug(f"微博图片将上传到子文件夹: {child.get('file_name')}")
+                        break
+
+                # 配图是附属品：下载/上传失败只告警并转入待补传队列，不影响已完成的
+                # 转存结果，更不能中断整个运行（曾因网络瞬断在这里炸掉整晚批次）
+                img_fid = self._upload_image_with_retry(
+                    first_url, image_name, image_target_fid
+                )
+                if img_fid:
+                    logging.info(f"微博图片上传成功: {image_name} (fid={img_fid})")
+                else:
+                    logging.warning(f"微博图片多次失败，转入待补传队列: {image_name}")
+                    self._record_failed_image({
+                        "image_url": first_url,
+                        "image_name": image_name,
+                        "save_dir": self.save_dir,
+                        "folder_name": image_target_name,
+                    })
 
         return True
 
@@ -764,8 +792,8 @@ def main() -> None:
         target_date=args.target_date,
         output_json=args.output_json,
         output_txt=args.output_txt,
-        processed_file=args.processed_file,
-        skip_processed=args.skip_processed,
+        saved_file=args.saved_file,
+        skip_saved=args.skip_saved,
         save_enabled=args.save,
         save_dir=args.save_dir,
     )

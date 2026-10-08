@@ -3017,3 +3017,90 @@ class TestBatch0908Alignment:
         # 普通编剧角色提取不受影响
         info3b = self._extract("《测试片》\n朴赞郁编剧电影\n韩语中字\n见平👇")
         assert info3b.writer == "朴赞郁"
+
+    def test_1007_batch_alignments(self):
+        # 10-07 批次：「X出演」保留原文用词渲染为「出演」
+        # （神的孩子全跳舞：“陈冲出演电影”→“陈冲出演”，不再一律渲染「主演」）
+        info = self._extract(
+            "《神的孩子全跳舞》\n改编自村上春树同名原著\n陈冲出演电影\n"
+            "英语中字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.cast == ["陈冲"]
+        assert info.cast_role_word == "出演"
+        filename = info.generate_filename()
+        assert "陈冲出演 英语中字" in filename
+
+        # 「主演」用词与既有渲染不受影响
+        info2 = self._extract("《测试片》\n汤姆·汉克斯主演电影\n英语中字\n见平👇")
+        assert info2.cast_role_word == "主演"
+        filename2 = info2.generate_filename()
+        assert "汤姆·汉克斯主演" in filename2
+
+        # 多提法并存时「主演」优先（A主演 + B出演 → 整组按主演渲染）
+        info3 = self._extract(
+            "《测试片》\nA演员主演\nB演员出演电影\n英语中字\n见平👇"
+        )
+        assert info3.cast_role_word == "主演"
+
+        # 纯「出演」多人类名单按「等出演」截断
+        names = "、".join(f"演员{i}号" for i in range(1, 6))
+        info4 = self._extract(
+            f"《测试片》\n{names}出演电影\n英语中字\n见平👇"
+        )
+        assert info4.cast_role_word == "出演"
+        filename4 = info4.generate_filename()
+        assert "演员1号、演员2号、演员3号、演员4号等出演" in filename4
+
+    def test_1008_batch_alignments(self):
+        # 10-08 批次：正文“全N季/前N季”在 N≥10 时同样生成“1-N季”区间
+        # 并剥离外文名“Season 1”后缀（法律与秩序两条，2026-10-08 基准统一）
+        info = MovieInfo(
+            chinese_name="法律与秩序：犯罪倾向",
+            foreign_name="Law & Order：Criminal Intent Season 1",
+            season=10,
+            season_raw="全10",
+            raw_text="《法律与秩序:犯罪倾向》\n热门高分悬疑惊悚犯罪剧集推荐\n"
+            "全10季 英语中字\n见平👇 ​​​",
+        )
+        filename = info.generate_filename()
+        assert filename.startswith(
+            "法律与秩序：犯罪倾向 Law & Order：Criminal Intent 1-10季 （"
+        )
+        assert "全10季" in filename
+
+        info2 = MovieInfo(
+            chinese_name="法律与秩序",
+            foreign_name="Law & Order Season 1",
+            season=24,
+            season_raw="前24",
+            raw_text="《法律与秩序》\n热门高分悬疑惊悚犯罪剧集推荐\n"
+            "前24季 英语中字\n见平👇 ​​​",
+        )
+        filename2 = info2.generate_filename()
+        assert filename2.startswith("法律与秩序 Law & Order 1-24季 （")
+        assert "前24季" in filename2
+
+        # 飞出个未来：外文名无季词后缀的合集（全13季+电影），
+        # N≥10 不生成区间，维持既有渲染
+        info_f = MovieInfo(
+            chinese_name="[动漫]飞出个未来系列",
+            foreign_name="Futurama",
+            season=13,
+            season_raw="全13",
+            raw_text="《飞出个未来》\n热门高分动画推荐\n全13季+电影 英语中字\n见平👇 ​​​",
+        )
+        assert info_f.generate_filename().startswith(
+            "[动漫]飞出个未来系列 Futurama （"
+        )
+
+        # 1-9 的既有区间行为不受影响（舞台剧形态）
+        info3 = MovieInfo(
+            chinese_name="舞台剧",
+            foreign_name="Staged",
+            season=3,
+            season_raw="全3",
+            raw_text="《舞台剧》\n大卫·田纳特、麦克·辛主演高分喜剧剧集\n"
+            "全三季 英语中英双字\n见平👇 ​​​",
+        )
+        assert info3.generate_filename().startswith("舞台剧 Staged 1-3季 （")

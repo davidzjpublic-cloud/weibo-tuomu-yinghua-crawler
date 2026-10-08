@@ -19,7 +19,7 @@ def make_lobster(tmp_path, save_enabled=False):
         target_date="2026-08-31",
         output_json=str(tmp_path / "results_2026-08-31.json"),
         output_txt=str(tmp_path / "filenames_2026-08-31.txt"),
-        processed_file=str(tmp_path / "processed.json"),
+        saved_file=str(tmp_path / "saved.json"),
         save_enabled=save_enabled,
     )
     # 提取器与正文链接走真实逻辑太重，直接替换为固定结果

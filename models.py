@@ -81,6 +81,8 @@ class MovieInfo:
     supervisor_pos: Optional[int] = None
     writer_pos: Optional[int] = None
     cast_pos: Optional[int] = None
+    # 主演段原文用词：「X出演电影」的「出演」渲染时保留原词（区别于默认的「主演」）
+    cast_role_word: Optional[str] = None
 
     def __setattr__(self, name: str, value) -> None:
         # 片名字段统一归一化：去首尾空格，HTML 实体解码，半角冒号转为全角冒号，
@@ -196,8 +198,10 @@ class MovieInfo:
             ]
             if cast_clean:
                 cast_str = '、'.join(cast_clean[:4])
+                # 原文用「出演」时保留原词（神的孩子全跳舞：“陈冲出演电影”→“陈冲出演”）；
                 # 超过 4 人截断后加“等”（“A、B、C、D等主演”）
-                cast_suffix = '等主演' if len(cast_clean) > 4 else '主演'
+                role_word = '出演' if self.cast_role_word == '出演' else '主演'
+                cast_suffix = f'等{role_word}' if len(cast_clean) > 4 else role_word
                 pos = self.cast_pos if self.cast_pos is not None else 9999
                 ordered_parts.append((pos, f"{safe_filename(cast_str)}{cast_suffix}"))
 
@@ -246,18 +250,20 @@ class MovieInfo:
         name = ""
         if self.chinese_name:
             name = safe_filename(self.chinese_name)
-            if self.season is not None and 1 <= self.season <= 9 and self.raw_text:
-                # 构建该季数对应的中文数字列表（如 3 -> ['三']）
+            if self.season is not None and self.season >= 1 and self.raw_text:
+                # 构建该季数对应的中文数字列表（如 3 -> ['三']），中文数字仅覆盖 1-9
                 season_chinese_nums = [
                     ch for ch, n in CHINESE_NUMBERS.items() if n == self.season
-                ]
+                ] if self.season <= 9 else []
                 # 仅当原文同时出现”全N季/全X季/前N季/前X季”等季节描述时才拆分，
                 # 避免误拆《9号秘事》这类片名
                 indicators = [f'全{self.season}季', f'前{self.season}季']
                 indicators.extend(f'全{ch}季' for ch in season_chinese_nums)
                 indicators.extend(f'前{ch}季' for ch in season_chinese_nums)
                 season_indicators_present = any(ind in self.raw_text for ind in indicators)
-                if season_indicators_present:
+                # 标题末尾季数拆分仅覆盖 1-9（中文数字/单个阿拉伯数字）；
+                # N≥10 的区间走下方 season_range 兜底分支
+                if season_indicators_present and self.season <= 9:
                     # 1) 末尾阿拉伯数字
                     m = re.search(r'(\d)\s*$', name)
                     if m and int(m.group(1)) == self.season:
@@ -275,15 +281,20 @@ class MovieInfo:
 
         # 待追加的季数范围（标题含季数字 或 正文有全N季描述）
         season_range = None
+        # N≥10 的区间仅在外文名带“Season N”等季词后缀时生成：
+        # 区间取代的是外文名里的单季标记（法律与秩序“Season 1”+前24季
+        # →“Law & Order 1-24季”）；飞出个未来“Futurama”+全13季+电影这类
+        # 合集外文名无季词，维持无区间的既有渲染（2026-10-08 基准统一）
+        has_season_word_suffix = bool(self.foreign_name and re.search(
+            r'(?:Season|Сезон|Sesong|Saison|Staffel|Stagione|Temporada|Sezon[ao]?'
+            r'|Sezóna|Évad|Kausi|Hooaeg)\s*\d+\s*$', self.foreign_name))
         if name:
             if title_season is not None:
                 season_range = f"1-{title_season}季"
-            elif (
-                season_indicators_present
-                and self.season is not None
-                and 1 <= self.season <= 9
+            elif season_indicators_present and (
+                self.season <= 9 or has_season_word_suffix
             ):
-                # 标题本身没有季节后缀，但正文有全N季描述，也补成 1-N季
+                # 标题本身没有季节后缀，但正文有全N季/前N季描述，也补成 1-N季
                 season_range = f"1-{self.season}季"
 
         if self.foreign_name:

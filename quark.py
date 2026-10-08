@@ -441,8 +441,14 @@ class QuarkClient:
         self,
         pdir_fid: str = "0",
         size: int = 100,
+        strict: bool = False,
     ) -> List[Dict]:
-        """分页列出目录下全部文件/文件夹。"""
+        """分页列出目录下全部文件/文件夹。
+
+        strict=True 时任一页请求失败（网络重试耗尽/接口报错）抛 RuntimeError，
+        供调用方区分「列目录失败」与「目录为空/无匹配项」——如定位配图
+        子文件夹失败时须转入待补传队列，而不是把配图误传到根目录。
+        """
         all_files: List[Dict] = []
         page = 1
         while True:
@@ -457,6 +463,10 @@ class QuarkClient:
             }
             data = self._drive_request("GET", url, params=params)
             if not data or data.get("code") != 0:
+                if strict:
+                    raise RuntimeError(
+                        f"列出目录失败 (pdir_fid={pdir_fid}, page={page}): {data}"
+                    )
                 break
             items = data.get("data", {}).get("list", [])
             if not items:

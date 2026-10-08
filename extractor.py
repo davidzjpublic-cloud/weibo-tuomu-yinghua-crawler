@@ -427,28 +427,30 @@ class MovieExtractor:
                 info.writer_pos = best_writer_pos
 
         # 提取主演（组合角色已添加的，此处补充更多演员）
+        # 候选同时记录原文用词（主演/出演），渲染时保留原词
         cast_candidates = []
 
         for m in re.finditer(
             # 分隔符两侧允许空格（“路易·C·K / 艾丽·范宁主演”）
-            r'([^《》\n\s]{2,15}(?:\s*[/、，,]\s*[^《》\n\s]{2,15})*)\s*(?:主演|出演)',
+            r'([^《》\n\s]{2,15}(?:\s*[/、，,]\s*[^《》\n\s]{2,15})*)\s*(主演|出演)',
             text,
         ):
-            cast_candidates.append(m.group(1).strip())
+            cast_candidates.append((m.group(1).strip(), m.group(2)))
 
         cast_match2 = re.search(
-            r'(?:主演|出演)[:：]\s*([^《》\n]{2,40}?)(?:\s|，|,|/|、|$)',
+            r'(主演|出演)[:：]\s*([^《》\n]{2,40}?)(?:\s|，|,|/|、|$)',
             text,
         )
         if cast_match2:
-            cast_candidates.append(cast_match2.group(1).strip())
+            cast_candidates.append((cast_match2.group(2).strip(), cast_match2.group(1)))
 
-        for m in re.finditer(r'》\s*([^《》\n]{2,30}?)\s*(?:主演|出演)', text):
-            cast_candidates.append(m.group(1).strip())
+        for m in re.finditer(r'》\s*([^《》\n]{2,30}?)\s*(主演|出演)', text):
+            cast_candidates.append((m.group(1).strip(), m.group(2)))
 
         all_cast: List[str] = []
         best_cast_pos = None
-        for raw in cast_candidates:
+        cast_role_word = None
+        for raw, role_word in cast_candidates:
             raw = re.sub(r'\s*(主演|出演)$', '', raw).strip()
             raw = re.sub(
                 r'^(' + '|'.join(CAST_CLEAN_PREFIX_KEYWORDS) + r')',
@@ -469,9 +471,14 @@ class MovieExtractor:
                 and '执导' not in c
                 and not re.search(r'全\d+集|第\d+季', c)
             ]
+            contributed = False
             for c in cast_list:
                 if c not in all_cast:
                     all_cast.append(c)
+                    contributed = True
+            # 有人名实际入列才记入原文用词；多提法并存时「主演」优先
+            if contributed and cast_role_word != '主演':
+                cast_role_word = role_word
             if all_cast and best_cast_pos is None:
                 pos = (
                     text.find(raw + '主演')
@@ -493,6 +500,9 @@ class MovieExtractor:
                         info.cast.append(c)
                 if info.cast_pos is None:
                     info.cast_pos = best_cast_pos
+            # 原文用词（主演/出演）随 cast 记录，生成文件名时保留
+            if cast_role_word:
+                info.cast_role_word = cast_role_word
 
         # 提取综艺“X/Y常驻”常驻嘉宾（心灵灯塔：星野源/若林正恭常驻高分综艺），
         # 按角色段位置渲染为“星野源、若林正恭常驻”

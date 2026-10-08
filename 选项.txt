@@ -1,0 +1,68 @@
+龙虾爬虫 main.py 命令行选项说明
+====================================
+
+共 11 个选项：
+
+速查表
+------
+选项                    | 类型   | 默认值                              | 说明
+--uid                   | 参数   | DEFAULT_UID                         | 目标微博用户 UID
+--max-pages             | 参数   | DEFAULT_MAX_PAGES                   | 最大抓取页数
+--target-date           | 参数   | 昨天                                | 目标日期 YYYY-MM-DD；失败条目不会自动重试，补转须显式指定原日期
+--config                | 参数   | config.json                         | Cookie 配置文件路径
+--saved-file            | 参数   | saved_weibo.json                    | 已转存微博 ID 记录文件
+--output-json           | 参数   | output/results_目标日期.json        | JSON 结果输出路径
+--output-txt            | 参数   | output/filenames_目标日期.txt       | 文件名列表输出路径
+--skip-saved            | 开关   | 关                                  | 跳过已转存成功的微博（标记由 --save 运行写入）
+--save                  | 开关   | 关                                  | 启用夸克转存与重命名，并把成功项写入 saved_weibo.json
+--save-dir              | 参数   | 来自：分享/【拓临】                 | 转存目标目录
+--verbose               | 开关   | 关                                  | 显示完整日志（含 DEBUG）
+
+一、抓取与定位
+--------------
+--uid <UID>              目标微博用户 UID（默认: config 中 DEFAULT_UID）
+--max-pages <N>          最大抓取页数（默认: DEFAULT_MAX_PAGES）
+--target-date <日期>     目标日期，格式 YYYY-MM-DD（默认: 昨天）
+                         注意：转存失败的条目不会在后续跑批中自动重试，
+                         补转必须显式指定原日期重跑。
+
+二、文件路径
+--------------
+--config <路径>          Cookie 配置文件路径（默认: config.json）
+--saved-file <路径>      已转存微博 ID 记录文件（默认: saved_weibo.json）
+--output-json <路径>     JSON 结果输出路径（默认: output/results_目标日期.json）
+--output-txt <路径>      文件名列表输出路径（默认: output/filenames_目标日期.txt）
+
+三、行为开关
+--------------
+--save                   启用夸克网盘转存与重命名，转存成功即把该微博
+                         逐条写入 saved_weibo.json（不带 --save 的验证
+                         运行永不写入标记）
+--skip-saved             跳过 saved_weibo.json 中已记录的微博
+                         （默认不跳过；只管跳过，不负责写标记）
+--save-dir <目录>        夸克网盘转存目标目录（默认: 来自：分享/【拓临】）
+--verbose                控制台显示完整日志（含 DEBUG 诊断信息，
+                         默认只显示关键进度与警告）
+
+日常用法组合
+--------------
+第一步 验证（不带 --save，人工比对基准，不会写标记）：
+    PYTHONUTF8=1 python main.py --target-date 日期
+
+第二步 转存（文件名核对无误后；成功项自动逐条记录到
+saved_weibo.json，中途终止不丢已完成项）：
+    PYTHONUTF8=1 python main.py --target-date 日期 --save
+
+精准补转（转存失败后；--skip-saved 跳过已成功的，只捡失败项。
+输出文件会被重写为只剩补转项，跑完需从备份恢复全量。
+2026-10-08 之后的批次成功项已自动标记，直接跑即可；
+更早的旧批次可能零标记，需先从当日 results JSON 把成功项
+weibo id 补进 saved_weibo.json）：
+    PYTHONUTF8=1 python main.py --target-date 原日期 --save --skip-saved
+
+注意：跑 main.py 必须带 PYTHONUTF8=1，否则泰文等字符会导致
+gbk 编码异常、条目被跳过。
+
+改名备注（2026-10-08）：--skip-processed → --skip-saved、
+--processed-file → --saved-file、processed_weibo.json →
+saved_weibo.json，旧名不再可用。

@@ -4,9 +4,9 @@ config.json.bak
 备忘.txt
 
 # ===== 运行状态与缓存 =====
-processed_weibo.json
+saved_weibo.json
 .douban_cache.json
-lobster.log
+lobster.log*
 chrome_cdp_debug.log
 chrome_weibo_cdp_debug.log
 result.txt
