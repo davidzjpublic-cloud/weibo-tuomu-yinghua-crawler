@@ -3104,3 +3104,28 @@ class TestBatch0908Alignment:
             "全三季 英语中英双字\n见平👇 ​​​",
         )
         assert info3.generate_filename().startswith("舞台剧 Staged 1-3季 （")
+
+    def test_1009_batch_alignments(self):
+        # 10-09 批次：中文名夹西文缩写的人名整体提取
+        # （幽灵与未亡人：“约瑟夫· L· 曼凯维奇导演作品”——通用导演正则
+        # 排除空白跨不过“ L· ”，曾截成“曼凯维奇”；L 前后空格原样保留）
+        info = self._extract(
+            "《幽灵与未亡人》\n奥斯卡金像奖黑白片最佳摄影提名作品\n"
+            "约瑟夫· L· 曼凯维奇导演作品\n英语中字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.director == "约瑟夫· L· 曼凯维奇"
+        filename = info.generate_filename()
+        assert "约瑟夫· L· 曼凯维奇导演" in filename
+
+        # 无空格变体同样整体提取（约瑟夫·L·曼凯维奇）
+        info2 = self._extract(
+            "《测试片》\n约瑟夫·L·曼凯维奇导演作品\n英语中字\n见平👇"
+        )
+        assert info2.director == "约瑟夫·L·曼凯维奇"
+
+        # 纯中文名（·两侧无西文字母）不误触发
+        info3 = self._extract(
+            "《测试片》\n侯孝贤监制 萧雅全导演作品\n英语中字\n见平👇"
+        )
+        assert info3.director == "萧雅全"

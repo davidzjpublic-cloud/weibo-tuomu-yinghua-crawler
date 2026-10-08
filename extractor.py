@@ -362,6 +362,15 @@ class MovieExtractor:
             for m in re.finditer(r'导演[:：]?\s*([^《》\n,，/、\s]{2,15})', text):
                 director_candidates.append(m.group(1).strip())
                 director_positions.append(m.start())
+            # 中文名夹西文缩写（幽灵与未亡人：“约瑟夫· L· 曼凯维奇导演作品”）：
+            # 上面通用正则的字符类排除空白，跨不过“ L· ”里的空格会截成“曼凯维奇”；
+            # 按「中文段·西文单字母·中文段」整体抓取，L 前后空格原样保留
+            for m in re.finditer(
+                r'([一-龥]{2,6}·\s*[A-Za-z]\s*·\s*[一-龥]{2,6})导演',
+                text,
+            ):
+                director_candidates.append(m.group(1).strip())
+                director_positions.append(m.start())
 
             best_director = None
             best_director_pos = None
