@@ -1,0 +1,53 @@
+龙虾爬虫迁移清单（迁移到其它机器时照此拷贝）
+================================================
+
+最后更新：2026-10-08
+
+一、主目录：整个 D:\lobster 整目录拷贝
+--------------
+包含代码、git 历史、以及所有被 .gitignore 排除、git clone 拿不到的本地文件：
+
+  必须带上：
+  - config.json           微博/夸克 Cookie（跨机可用；config.json.bak 备用）
+  - 备忘.txt              API Key 等机密
+  - saved_weibo.json      已转存微博标记（约 215 条，丢了会全量重转）
+  - output/               全部批次输出：results_*.json（全量回归语料）、
+                          filenames_*_0.txt（手改基准）、archive/（按月归档）、
+                          failed_images.json（待补传配图队列，运行状态文件）
+  - .claude/              Claude Code 本项目授权配置（新机也用 Claude Code 则带上）
+  - .douban_cache.json    豆瓣缓存（可选，不带只是首次搜索慢）
+  - 选项.txt、需求.txt、影视作品文件夹去重.txt 等笔记
+
+  不用拷（新机重建/重装）：
+  - venv/                 → 新机执行 pip install -r requirements.txt
+  - __pycache__/  .pytest_cache/  build/  dist/
+  - chrome_*_profile/     浏览器 CDP 配置目录（需要时重新生成）
+  - lobster.log*          日志、轮转备份与压缩档
+
+二、Claude Code 记忆（经验延续，强烈建议）
+--------------
+  位置：C:\Users\<用户名>\.claude\projects\d--lobster\memory\
+  （含 MEMORY.md 索引 + 各条 .md，共约 9 个文件）
+
+  放到新机对应用户目录下的同名项目命名空间：
+  - 新机项目仍放 D:\lobster → 原样拷入 .claude\projects\d--lobster\memory\
+  - 换盘符/路径（如 E:\lobster）→ 先在新机用 Claude Code 打开一次项目，
+    生成 .claude\projects\<路径编码>\ 目录后，再把 memory 内容放进去
+    （d--lobster 这种名字由项目路径生成）
+
+三、可选（全局偏好）
+--------------
+  C:\Users\<用户名>\.claude\ 下的 CLAUDE.md、settings.json
+
+四、新机就绪步骤
+--------------
+  1. pip install -r requirements.txt（重建 Python 环境）
+  2. 跑批一律带 PYTHONUTF8=1 前缀，否则泰文等字符触发 gbk 编码异常
+  3. 首次跑批建议先不带 --save 验证文件名，再正式转存
+  4. git 远端兜底：github.com/davidzjpublic-cloud/weibo-tuomu-yinghua-crawler
+     （代码与提交历史可随时 clone 找回；上面列的本地文件远端没有）
+
+维护说明
+--------------
+本文件由 Claude 自动维护：迁移相关文件/路径/策略变化时同步更新。
+同类文件：选项.txt（main.py 命令行参数说明）也由 Claude 在参数变化时自动更新。
