@@ -3129,3 +3129,33 @@ class TestBatch0908Alignment:
             "《测试片》\n侯孝贤监制 萧雅全导演作品\n英语中字\n见平👇"
         )
         assert info3.director == "萧雅全"
+
+    def test_1010_batch_alignments(self):
+        # 10-10 批次两项：「金融」类别词（与「科普」同位，插「纪录」前）、
+        # 「无对白默片」连写整体作为语言词（不拆成“无对白”丢掉“默片”）
+        info = self._extract(
+            "《货币崛起》\n高分金融纪录剧集推荐\n全6集 英语中英双字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.category == "金融/纪录"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "高分金融纪录剧集 全6集" in filename
+
+        info2 = self._extract(
+            "《疯狂的一页》\n改编自川端康成原著\n衣笠贞之助导演作品\n无对白默片\n见平👇 ​​​"
+        )
+        assert info2 is not None
+        assert info2.language == "无对白默片"
+        assert info2.director == "衣笠贞之助"
+        info2.douban_rating = "豆瓣7.8"
+        assert "衣笠贞之助导演 无对白默片 豆瓣7.8" in info2.generate_filename()
+
+        # 独立“无对白”与“无对白+类型”既有分支不受影响（疯神/贡达形态）
+        info3 = self._extract("《疯神》\n高分恐怖动画推荐\n无对白\n见平👇 ​​​")
+        assert info3.language == "无对白"
+        info4 = self._extract(
+            "《贡达》\n柏林电影节遇见单元最佳影片提名作品\n无对白纪录片\n见平👇 ​​​"
+        )
+        assert info4.genre == "无对白纪录片"
+        assert info4.language is None

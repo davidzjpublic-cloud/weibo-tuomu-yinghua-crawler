@@ -940,8 +940,12 @@ class MovieExtractor:
                 info.language = pure_match.group(1)
 
         # 独立成行的“无对白”说明（疯神：无对白 单独一行，不连写类型词），
-        # 同样作为语言位置保留；“无对白+类型”连写仍由 genre 分支整体处理
-        if not info.language and re.search(r'无对白(?!(?:纪录片|短片|动画|纯享))', text):
+        # 同样作为语言位置保留；“无对白+类型”连写仍由 genre 分支整体处理；
+        # “无对白默片”连写（疯狂的一页）整体作为语言词保留，
+        # 不拆成“无对白”而丢掉“默片”
+        if not info.language and '无对白默片' in text:
+            info.language = '无对白默片'
+        elif not info.language and re.search(r'无对白(?!(?:纪录片|短片|动画|纯享))', text):
             info.language = '无对白'
 
         # 提取集数
