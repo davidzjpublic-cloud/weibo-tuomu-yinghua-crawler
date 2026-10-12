@@ -3159,3 +3159,24 @@ class TestBatch0908Alignment:
         )
         assert info4.genre == "无对白纪录片"
         assert info4.language is None
+
+    def test_1013_batch_alignments(self):
+        # 10-13 批次：「英版」地域版本标记（我欲为人：英版全5季，
+        # 区分同名英美剧版本），作为版本说明段置于类别段之后、季数段之前
+        info = self._extract(
+            "《我欲为人》\n高分喜剧恐怖剧集推荐\n英版全5季  英语中英双字\n见平👇 ​​​"
+        )
+        assert info is not None
+        assert info.restore_tag == "英版"
+        assert info.category == "喜剧/恐怖"
+        assert info.genre == "剧集"
+        filename = info.generate_filename()
+        assert "高分喜剧恐怖剧集 英版 全5季" in filename
+
+        # 既有版本词与片名自带的「电影版」形态不受影响
+        info2 = self._extract("《爱在暹罗》\n修复版 泰语中字\n见平👇")
+        assert info2.restore_tag == "修复版"
+        info3 = self._extract(
+            "《灾 电影版》\n香川照之主演最新悬疑惊悚电影\n已出日语中字\n见平👇"
+        )
+        assert info3.restore_tag is None

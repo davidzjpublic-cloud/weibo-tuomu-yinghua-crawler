@@ -648,11 +648,12 @@ class MovieExtractor:
         if producer_match:
             info.producer_tag = producer_match.group(1)
 
-        # 提取“修复版/加长版/未删减版/高画质版”版本说明（爱在暹罗：修复版 泰语中字；
+        # 提取“修复版/加长版/未删减版/高画质版/英版”版本说明（爱在暹罗：修复版 泰语中字；
         # 铁血战士：杀戮之王：加长版 英语中英双字；
-        # 沃伦：未删减版 多语中英双字；风花：高画质版中日双字），
+        # 沃伦：未删减版 多语中英双字；风花：高画质版中日双字；
+        # 我欲为人：英版全5季——英版标记区分同名英美剧版本，随季数段前显示），
         # 生成文件名时作为独立段落置于类别段之后
-        restore_match = re.search(r'(修复版|加长版|未删减版|高画质版)', text_after_title)
+        restore_match = re.search(r'(修复版|加长版|未删减版|高画质版|英版)', text_after_title)
         if restore_match:
             info.restore_tag = restore_match.group(1)
 
